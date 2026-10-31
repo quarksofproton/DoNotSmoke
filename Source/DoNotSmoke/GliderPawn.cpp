@@ -574,7 +574,7 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 				const FVector DirFromCam = ToRimCam.GetSafeNormal();
 				const FVector DirFromSpawn = (RimLoc - SpawnLoc).GetSafeNormal();
 
-				// Verify that (RimLoc - SpawnLoc).GetSafeNormal() is within MaxAimConeHalfAngleDeg (75 deg) of GliderForward
+				// Verify that (RimLoc - SpawnLoc).GetSafeNormal() is within MaxAimConeHalfAngleDeg (135 deg) of GliderForward
 				if (FVector::DotProduct(GliderForward, DirFromSpawn) < MaxConeCos)
 				{
 					continue;

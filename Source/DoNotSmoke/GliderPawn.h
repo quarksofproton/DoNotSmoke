@@ -21,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCarbonSealFiredSignature);
 /**
  * Kinematic Solar Glider Pawn featuring:
  * - Strict net-loss gliding (15:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
- * - Decoupled SpringArm camera look & 45-degree cone clamped projectile aiming with ~10-degree magnetic assist
+ * - Decoupled SpringArm camera look & 135-degree cone clamped projectile aiming with ~10-degree magnetic assist
  * - Periodic 0.2s vertical sunlight LineTrace (binary 12.5%/s charge vs 0%/s under smog)
  * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 600u "PULL UP!" warning, 2600u Max Ceiling
  */
@@ -249,7 +249,7 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Combat", meta = (AllowPrivateAccess = "true"))
 	float AimAssistMaxRange = 20000.0f;
 
-	/** Displays live C++ debug telemetry and 45-degree aim indicator on screen before UMG HUD is wired. */
+	/** Displays live C++ debug telemetry and 135-degree aim indicator on screen before UMG HUD is wired. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Glider|Debug", meta = (AllowPrivateAccess = "true"))
 	bool bShowDebugHUD = true;
 
