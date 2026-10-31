@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+#include "GameplayInterfaces.h"
 #include "GliderPawn.generated.h"
 
 class USphereComponent;
@@ -75,6 +76,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Glider|Telemetry")
 	bool IsPullUpWarningActive() const { return bIsPullUpWarningActive; }
+
+	/** Valid after OnGliderCrashed has fired. */
+	UFUNCTION(BlueprintPure, Category = "Glider|Telemetry")
+	EGliderCrashCause GetLastCrashCause() const { return LastCrashCause; }
 
 	/** Applies external downward wake turbulence impulse (e.g., from passing VIP Private Jet). */
 	UFUNCTION(BlueprintCallable, Category = "Glider|Hazards")
@@ -281,6 +286,7 @@ private:
 	bool bIsInSunlight = true;
 	bool bIsPullUpWarningActive = false;
 	bool bHasCrashed = false;
+	EGliderCrashCause LastCrashCause = EGliderCrashCause::Ground;
 
 	bool bKeyPitchUpHeld = false;
 	bool bKeyPitchDownHeld = false;
@@ -303,7 +309,7 @@ private:
 	void UpdateSolarEnergyAndAltitudeChecks(float DeltaTime);
 	void UpdateDecoupledCamera(float DeltaTime);
 	void PerformSunlightTrace();
-	void TriggerCrash();
+	void TriggerCrash(EGliderCrashCause Cause);
 
 	FVector ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVector& OutMagneticRimLocation) const;
 

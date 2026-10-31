@@ -13,16 +13,119 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Components/Image.h"
+#include "Components/Button.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+
+// ==========================================
+// Shared UI helpers
+// ==========================================
+
+namespace DoNotSmokeUI
+{
+	template <typename T>
+	static T* FindUIAsset(const TCHAR* Path)
+	{
+		ConstructorHelpers::FObjectFinder<T> Finder(Path);
+		return Finder.Succeeded() ? Finder.Object : nullptr;
+	}
+
+	static UImage* AddImage(UWidgetTree* Tree, UCanvasPanel* Canvas, const FName Name, UTexture2D* Texture,
+		const FAnchors& Anchors, const FVector2D& Alignment, const FVector2D& Position, const FVector2D& Size)
+	{
+		UImage* Image = Tree->ConstructWidget<UImage>(UImage::StaticClass(), Name);
+		if (Texture)
+		{
+			Image->SetBrushFromTexture(Texture, false);
+		}
+		Image->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UCanvasPanelSlot* Slot = Canvas->AddChildToCanvas(Image))
+		{
+			Slot->SetAnchors(Anchors);
+			Slot->SetAlignment(Alignment);
+			Slot->SetPosition(Position);
+			Slot->SetSize(Size);
+		}
+		return Image;
+	}
+
+	static UTextBlock* MakeText(UWidgetTree* Tree, const FName Name, int32 FontSize, const FLinearColor& Color)
+	{
+		UTextBlock* Text = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		FSlateFontInfo Font = Text->GetFont();
+		Font.Size = FontSize;
+		Text->SetFont(Font);
+		Text->SetJustification(ETextJustify::Center);
+		Text->SetColorAndOpacity(FSlateColor(Color));
+		Text->SetVisibility(ESlateVisibility::HitTestInvisible);
+		return Text;
+	}
+
+	/** Auto-sized and centred on Position so text stays vertically centred on its panel art. */
+	static void AddText(UCanvasPanel* Canvas, UTextBlock* Text, const FAnchors& Anchors, const FVector2D& Position)
+	{
+		if (UCanvasPanelSlot* Slot = Canvas->AddChildToCanvas(Text))
+		{
+			Slot->SetAnchors(Anchors);
+			Slot->SetAlignment(FVector2D(0.5f, 0.5f));
+			Slot->SetPosition(Position);
+			Slot->SetAutoSize(true);
+		}
+	}
+}
 
 // ==========================================
 // UDoNotSmokeFlightHUDWidget Implementation
 // ==========================================
 
+// Layout reference: 1920x1080, scaled by the project DPI curve
+namespace HUDLayout
+{
+	static const FVector2D CrosshairSize(200.0f, 200.0f);
+	static const FVector2D CooldownRingSize(120.0f, 120.0f);
+
+	static const FVector2D BatterySize(280.0f, 280.0f);
+	static const FVector2D BatteryPosition(-80.0f, 0.0f);
+	// Vertical extent of the coloured arc inside its 800x800 texture
+	static constexpr float BatteryArcTopV = 132.0f / 800.0f;
+	static constexpr float BatteryArcBottomV = 668.0f / 800.0f;
+
+	static const FVector2D RulerSize(90.0f, 495.0f);
+	static const FVector2D RulerPosition(-60.0f, 0.0f);
+	static const FVector2D ArrowSize(44.0f, 44.0f);
+	// Horizontal position of the tick column inside the ruler texture
+	static constexpr float RulerTickU = 0.75f;
+}
+
+UDoNotSmokeFlightHUDWidget::UDoNotSmokeFlightHUDWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	using namespace DoNotSmokeUI;
+	ProgressMaskMaterial = FindUIAsset<UMaterialInterface>(TEXT("/Game/Game/UI/Materials/M_UI_ProgressMask.M_UI_ProgressMask"));
+	CrosshairTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Crosshair.T_UI_Crosshair"));
+	RingDarkTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_RingDark.T_UI_RingDark"));
+	RingFillTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Ring.T_UI_Ring"));
+	RingReadyTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_RingGreen.T_UI_RingGreen"));
+	ArcGaugeTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArcGauge.T_UI_ArcGauge"));
+	ArcChargeTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArcGreen.T_UI_ArcGreen"));
+	ArcBoostTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArcBlue.T_UI_ArcBlue"));
+	ArcLowTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArcRed.T_UI_ArcRed"));
+	AltimeterRulerTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_GaugeAltitudeRuler.T_UI_GaugeAltitudeRuler"));
+	AltimeterArrowTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArrowLeft.T_UI_ArrowLeft"));
+	TopBarTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_BannerPanel.T_UI_BannerPanel"));
+	WarningPanelTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_WarningPanel.T_UI_WarningPanel"));
+	ChevronUpTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ChevronUp.T_UI_ChevronUp"));
+	HazardFrameTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_HazardFrame.T_UI_HazardFrame"));
+}
+
 void UDoNotSmokeFlightHUDWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	BuildFallbackWidgetTree();
+	CreateProgressMaterials();
 }
 
 TSharedRef<SWidget> UDoNotSmokeFlightHUDWidget::RebuildWidget()
@@ -33,6 +136,8 @@ TSharedRef<SWidget> UDoNotSmokeFlightHUDWidget::RebuildWidget()
 
 void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 {
+	using namespace DoNotSmokeUI;
+
 	if (bBuiltFallbackTree)
 	{
 		return;
@@ -52,115 +157,114 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 	UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("RootCanvas"));
 	WidgetTree->RootWidget = RootCanvas;
 
-	// 1. Right side: Altitude Bar (moving vertical indicator, 0..3900u)
-	if (!AltitudeBar)
-	{
-		AltitudeBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("AltitudeBar"));
-		AltitudeBar->SetBarFillType(EProgressBarFillType::BottomToTop);
-		AltitudeBar->SetFillColorAndOpacity(FLinearColor(0.2f, 0.7f, 1.0f, 0.85f));
-		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(AltitudeBar))
-		{
-			Slot->SetAnchors(FAnchors(1.0f, 0.25f, 1.0f, 0.75f));
-			Slot->SetAlignment(FVector2D(1.0f, 0.5f));
-			Slot->SetOffsets(FMargin(-40.0f, 0.0f, 24.0f, 400.0f));
-		}
-	}
+	const FAnchors TopLeft(0.0f, 0.0f);
+	const FAnchors Center(0.5f, 0.5f);
+	const FAnchors LeftCenter(0.0f, 0.5f);
+	const FAnchors RightCenter(1.0f, 0.5f);
+	const FAnchors TopCenter(0.5f, 0.0f);
+	const FVector2D Centered(0.5f, 0.5f);
 
-	// 2. Left side: Solar Battery ProgressBar (0..100%)
-	if (!SolarBatteryBar)
+	// 1. Full-screen red hazard vignette (behind everything, shown with PULL UP!)
+	HazardVignette = AddImage(WidgetTree, RootCanvas, TEXT("HazardVignette"), HazardFrameTexture, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+	if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(HazardVignette->Slot))
 	{
-		SolarBatteryBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("SolarBatteryBar"));
-		SolarBatteryBar->SetBarFillType(EProgressBarFillType::BottomToTop);
-		SolarBatteryBar->SetFillColorAndOpacity(FLinearColor(1.0f, 0.85f, 0.1f, 0.85f));
-		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(SolarBatteryBar))
-		{
-			Slot->SetAnchors(FAnchors(0.0f, 0.25f, 0.0f, 0.75f));
-			Slot->SetAlignment(FVector2D(0.0f, 0.5f));
-			Slot->SetOffsets(FMargin(40.0f, 0.0f, 24.0f, 400.0f));
-		}
+		Slot->SetOffsets(FMargin(0.0f));
 	}
+	HazardVignette->SetVisibility(ESlateVisibility::Collapsed);
 
-	// 3. Center: Dynamic 3D Projected Crosshair Text
-	if (!CrosshairText)
-	{
-		CrosshairText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CrosshairText"));
-		CrosshairText->SetText(FText::FromString(TEXT("+")));
-		CrosshairText->SetJustification(ETextJustify::Center);
-		CrosshairText->SetColorAndOpacity(FSlateColor(FLinearColor(0.2f, 0.95f, 1.0f, 0.9f)));
-		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(CrosshairText))
-		{
-			Slot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
-			Slot->SetAlignment(FVector2D(0.5f, 0.5f));
-			Slot->SetSize(FVector2D(48.0f, 48.0f));
-			Slot->SetPosition(FVector2D(960.0f, 540.0f));
-		}
-	}
+	// 2. Left: solar battery arc (frame + masked fill share the same box so the art lines up)
+	BatteryGaugeFrame = AddImage(WidgetTree, RootCanvas, TEXT("BatteryGaugeFrame"), ArcGaugeTexture, LeftCenter, FVector2D(0.0f, 0.5f), HUDLayout::BatteryPosition, HUDLayout::BatterySize);
+	BatteryFill = AddImage(WidgetTree, RootCanvas, TEXT("BatteryFill"), ArcChargeTexture, LeftCenter, FVector2D(0.0f, 0.5f), HUDLayout::BatteryPosition, HUDLayout::BatterySize);
 
-	// 4. Center: Cooldown ProgressBar (1.0 - GetSealCooldownNormalized())
-	if (!SealCooldownBar)
-	{
-		SealCooldownBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("SealCooldownBar"));
-		SealCooldownBar->SetBarFillType(EProgressBarFillType::LeftToRight);
-		SealCooldownBar->SetFillColorAndOpacity(FLinearColor(0.1f, 0.9f, 0.3f, 0.85f));
-		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(SealCooldownBar))
-		{
-			Slot->SetAnchors(FAnchors(0.5f, 0.54f, 0.5f, 0.54f));
-			Slot->SetAlignment(FVector2D(0.5f, 0.0f));
-			Slot->SetOffsets(FMargin(0.0f, 0.0f, 100.0f, 10.0f));
-		}
-	}
+	// 3. Right: altimeter ruler + moving arrow
+	AltimeterRuler = AddImage(WidgetTree, RootCanvas, TEXT("AltimeterRuler"), AltimeterRulerTexture, RightCenter, FVector2D(1.0f, 0.5f), HUDLayout::RulerPosition, HUDLayout::RulerSize);
+	AltimeterArrow = AddImage(WidgetTree, RootCanvas, TEXT("AltimeterArrow"), AltimeterArrowTexture, RightCenter, FVector2D(0.0f, 0.5f), FVector2D::ZeroVector, HUDLayout::ArrowSize);
 
-	// 5. Top: Open Stacks & CO2 TextBlock
-	if (!StacksAndCO2Text)
-	{
-		StacksAndCO2Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StacksAndCO2Text"));
-		StacksAndCO2Text->SetJustification(ETextJustify::Center);
-		StacksAndCO2Text->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.95f)));
-		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(StacksAndCO2Text))
-		{
-			Slot->SetAnchors(FAnchors(0.5f, 0.03f, 0.5f, 0.03f));
-			Slot->SetAlignment(FVector2D(0.5f, 0.0f));
-			Slot->SetOffsets(FMargin(0.0f, 0.0f, 950.0f, 32.0f));
-		}
-	}
+	// 4. Center: cooldown ring stack + crosshair (repositioned every tick onto the projected aim point)
+	CooldownRingBase = AddImage(WidgetTree, RootCanvas, TEXT("CooldownRingBase"), RingDarkTexture, TopLeft, Centered, FVector2D(960.0f, 540.0f), HUDLayout::CooldownRingSize);
+	CooldownRingFill = AddImage(WidgetTree, RootCanvas, TEXT("CooldownRingFill"), RingFillTexture, TopLeft, Centered, FVector2D(960.0f, 540.0f), HUDLayout::CooldownRingSize);
+	CooldownRingReady = AddImage(WidgetTree, RootCanvas, TEXT("CooldownRingReady"), RingReadyTexture, TopLeft, Centered, FVector2D(960.0f, 540.0f), HUDLayout::CooldownRingSize);
+	CrosshairImage = AddImage(WidgetTree, RootCanvas, TEXT("CrosshairImage"), CrosshairTexture, TopLeft, Centered, FVector2D(960.0f, 540.0f), HUDLayout::CrosshairSize);
 
-	// 6. Top: VIP Jet Warning TextBlock
-	if (!JetWarningText)
-	{
-		JetWarningText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("JetWarningText"));
-		JetWarningText->SetJustification(ETextJustify::Center);
-		JetWarningText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.2f, 0.2f, 1.0f)));
-		JetWarningText->SetVisibility(ESlateVisibility::Hidden);
-		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(JetWarningText))
-		{
-			Slot->SetAnchors(FAnchors(0.5f, 0.08f, 0.5f, 0.08f));
-			Slot->SetAlignment(FVector2D(0.5f, 0.0f));
-			Slot->SetOffsets(FMargin(0.0f, 0.0f, 850.0f, 32.0f));
-		}
-	}
+	// 5. Top: carbon bar
+	AddImage(WidgetTree, RootCanvas, TEXT("TopBarPanel"), TopBarTexture, TopCenter, FVector2D(0.5f, 0.0f), FVector2D(0.0f, 16.0f), FVector2D(720.0f, 180.0f));
+	StacksAndCO2Text = MakeText(WidgetTree, TEXT("StacksAndCO2Text"), 20, FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
+	AddText(RootCanvas, StacksAndCO2Text, TopCenter, FVector2D(0.0f, 106.0f));
 
-	// 7. Center-bottom: Red "PULL UP!" TextBlock
-	if (!PullUpWarningText)
-	{
-		PullUpWarningText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PullUpWarningText"));
-		PullUpWarningText->SetText(FText::FromString(TEXT("PULL UP!")));
-		PullUpWarningText->SetJustification(ETextJustify::Center);
-		PullUpWarningText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.05f, 0.05f, 1.0f)));
-		PullUpWarningText->SetVisibility(ESlateVisibility::Hidden);
-		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(PullUpWarningText))
-		{
-			Slot->SetAnchors(FAnchors(0.5f, 0.72f, 0.5f, 0.72f));
-			Slot->SetAlignment(FVector2D(0.5f, 0.5f));
-			Slot->SetOffsets(FMargin(0.0f, 0.0f, 360.0f, 50.0f));
-		}
-	}
+	// 6. Top: VIP jet warning panel
+	JetWarningPanel = AddImage(WidgetTree, RootCanvas, TEXT("JetWarningPanel"), WarningPanelTexture, TopCenter, FVector2D(0.5f, 0.0f), FVector2D(0.0f, 200.0f), FVector2D(600.0f, 150.0f));
+	JetWarningText = MakeText(WidgetTree, TEXT("JetWarningText"), 20, FLinearColor(1.0f, 0.25f, 0.2f, 1.0f));
+	AddText(RootCanvas, JetWarningText, TopCenter, FVector2D(0.0f, 275.0f));
+	JetWarningPanel->SetVisibility(ESlateVisibility::Collapsed);
+	JetWarningText->SetVisibility(ESlateVisibility::Collapsed);
+
+	// 7. Lower center: PULL UP! chevron + panel
+	const FAnchors PullUpAnchor(0.5f, 0.74f);
+	PullUpChevron = AddImage(WidgetTree, RootCanvas, TEXT("PullUpChevron"), ChevronUpTexture, PullUpAnchor, Centered, FVector2D(0.0f, -105.0f), FVector2D(110.0f, 110.0f));
+	PullUpPanel = AddImage(WidgetTree, RootCanvas, TEXT("PullUpPanel"), WarningPanelTexture, PullUpAnchor, Centered, FVector2D::ZeroVector, FVector2D(520.0f, 130.0f));
+	PullUpWarningText = MakeText(WidgetTree, TEXT("PullUpWarningText"), 40, FLinearColor(1.0f, 0.15f, 0.1f, 1.0f));
+	PullUpWarningText->SetText(FText::FromString(TEXT("PULL UP!")));
+	AddText(RootCanvas, PullUpWarningText, PullUpAnchor, FVector2D::ZeroVector);
+	PullUpChevron->SetVisibility(ESlateVisibility::Collapsed);
+	PullUpPanel->SetVisibility(ESlateVisibility::Collapsed);
+	PullUpWarningText->SetVisibility(ESlateVisibility::Collapsed);
 
 	bBuiltFallbackTree = true;
+}
+
+void UDoNotSmokeFlightHUDWidget::CreateProgressMaterials()
+{
+	if (!ProgressMaskMaterial)
+	{
+		return;
+	}
+
+	if (CooldownRingFill && !CooldownRingMID)
+	{
+		CooldownRingMID = UMaterialInstanceDynamic::Create(ProgressMaskMaterial, this);
+		CooldownRingMID->SetTextureParameterValue(TEXT("Tex"), RingFillTexture);
+		CooldownRingMID->SetScalarParameterValue(TEXT("Mode"), 0.0f);
+		CooldownRingFill->SetBrushFromMaterial(CooldownRingMID);
+	}
+
+	if (BatteryFill && !BatteryFillMID)
+	{
+		BatteryFillMID = UMaterialInstanceDynamic::Create(ProgressMaskMaterial, this);
+		BatteryFillMID->SetTextureParameterValue(TEXT("Tex"), ArcChargeTexture);
+		BatteryFillMID->SetScalarParameterValue(TEXT("Mode"), 1.0f);
+		BatteryFillMID->SetScalarParameterValue(TEXT("LinearMin"), HUDLayout::BatteryArcTopV);
+		BatteryFillMID->SetScalarParameterValue(TEXT("LinearMax"), HUDLayout::BatteryArcBottomV);
+		BatteryFill->SetBrushFromMaterial(BatteryFillMID);
+	}
+}
+
+float UDoNotSmokeFlightHUDWidget::AltitudeToRulerV(float Altitude)
+{
+	// Ruler texture rows (normalized V) for each altitude band boundary:
+	// dark smog bed 0-400u, red pull-up band 400-600u, orange chimney band 600-1400u, green open sky 1400-3900u
+	static const float Altitudes[] = { 0.0f, 400.0f, 600.0f, 1400.0f, 3900.0f };
+	static const float RulerV[] = { 0.923f, 0.812f, 0.754f, 0.515f, 0.166f };
+
+	if (Altitude <= Altitudes[0])
+	{
+		return RulerV[0];
+	}
+	for (int32 i = 1; i < UE_ARRAY_COUNT(Altitudes); ++i)
+	{
+		if (Altitude <= Altitudes[i])
+		{
+			const float Alpha = (Altitude - Altitudes[i - 1]) / (Altitudes[i] - Altitudes[i - 1]);
+			return FMath::Lerp(RulerV[i - 1], RulerV[i], Alpha);
+		}
+	}
+	return RulerV[UE_ARRAY_COUNT(RulerV) - 1];
 }
 
 void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	BlinkTime += InDeltaTime;
 
 	if (!CachedGlider.IsValid())
 	{
@@ -174,120 +278,301 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 	AGliderPawn* Glider = CachedGlider.Get();
 	ADoNotSmokeGameMode* GM = CachedGameMode.Get();
 
+	// Hard on/off blink at ~3 Hz for warnings
+	const bool bBlinkOn = FMath::Fmod(BlinkTime, 0.33f) < 0.2f;
+
 	if (Glider)
 	{
-		// Dynamic 3D Projected Crosshair
-		if (CrosshairText)
+		UpdateCrosshairAndCooldown(Glider);
+		UpdateBattery(Glider);
+		UpdateAltimeter(Glider);
+
+		const bool bPullUp = Glider->IsPullUpWarningActive();
+		const ESlateVisibility PullUpVis = (bPullUp && bBlinkOn) ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		if (PullUpPanel) { PullUpPanel->SetVisibility(PullUpVis); }
+		if (PullUpChevron) { PullUpChevron->SetVisibility(PullUpVis); }
+		if (PullUpWarningText) { PullUpWarningText->SetVisibility(PullUpVis); }
+		if (HazardVignette)
 		{
-			APlayerController* PC = GetOwningPlayer();
-			if (!PC)
-			{
-				PC = UGameplayStatics::GetPlayerController(this, 0);
-			}
-
-			if (PC)
-			{
-				FVector2D ScreenPos = FVector2D::ZeroVector;
-				const bool bProjected = UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
-					PC,
-					Glider->GetAimWorldTargetLocation(),
-					ScreenPos,
-					true);
-
-				if (bProjected)
-				{
-					if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(CrosshairText->Slot))
-					{
-						CanvasSlot->SetPosition(ScreenPos);
-					}
-				}
-			}
-
-			// Crosshair color & feedback:
-			// Red on cooldown, Neon Green [+] when magnetic lock active, Yellow when clamped to cone, Cyan/White otherwise
-			if (Glider->GetSealCooldownRemaining() > 0.0f)
-			{
-				CrosshairText->SetText(FText::FromString(TEXT("+")));
-				CrosshairText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.15f, 0.15f, 0.85f)));
-			}
-			else if (Glider->HasMagneticLock())
-			{
-				CrosshairText->SetText(FText::FromString(TEXT("[+]")));
-				CrosshairText->SetColorAndOpacity(FSlateColor(FLinearColor(0.1f, 1.0f, 0.2f, 1.0f)));
-			}
-			else if (Glider->IsAimConeClamped())
-			{
-				CrosshairText->SetText(FText::FromString(TEXT("+")));
-				CrosshairText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.85f, 0.1f, 0.85f)));
-			}
-			else
-			{
-				CrosshairText->SetText(FText::FromString(TEXT("+")));
-				CrosshairText->SetColorAndOpacity(FSlateColor(FLinearColor(0.2f, 0.95f, 1.0f, 0.9f)));
-			}
-		}
-
-		// Right side: Altitude bar (GetCurrentAltitude() / 3900.0f)
-		if (AltitudeBar)
-		{
-			const float AltFraction = FMath::Clamp(Glider->GetCurrentAltitude() / 3900.0f, 0.0f, 1.0f);
-			AltitudeBar->SetPercent(AltFraction);
-		}
-
-		// Left side: Solar Battery ProgressBar (GetSolarChargePercent() / 100.0f)
-		if (SolarBatteryBar)
-		{
-			const float BattFraction = FMath::Clamp(Glider->GetSolarChargePercent() / 100.0f, 0.0f, 1.0f);
-			SolarBatteryBar->SetPercent(BattFraction);
-		}
-
-		// Center: Crosshair + Cooldown ProgressBar (1.0f - GetSealCooldownNormalized())
-		if (SealCooldownBar)
-		{
-			const float ReadyFraction = FMath::Clamp(1.0f - Glider->GetSealCooldownNormalized(), 0.0f, 1.0f);
-			SealCooldownBar->SetPercent(ReadyFraction);
-		}
-
-		// Center-bottom: Red "PULL UP!" TextBlock (IsPullUpWarningActive())
-		if (PullUpWarningText)
-		{
-			const bool bPullUp = Glider->IsPullUpWarningActive();
-			PullUpWarningText->SetVisibility(bPullUp ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
+			HazardVignette->SetVisibility(bPullUp ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+			HazardVignette->SetRenderOpacity(0.55f + 0.45f * FMath::Abs(FMath::Sin(BlinkTime * 6.0f)));
 		}
 	}
 
 	if (GM)
 	{
-		// Top: Open Stacks & CO2 TextBlock
 		if (StacksAndCO2Text)
 		{
+			FString Stars;
+			for (int32 s = 0; s < GM->CalculateStarRating(); ++s) { Stars += TEXT("★"); }
+
 			const FString Msg = FString::Printf(
-				TEXT("OPEN STACKS: %d / %d   |   CO2: %.1f kg (Target: %.0f)   |   SUN POCKETS: %.0f%%   |   RATING: %d*"),
+				TEXT("STACKS %d/%d   CO2 %.0f / %.0f kg   SUN %.0f%%   %s"),
 				GM->GetOpenSmokestackCount(),
 				GM->GetTotalSmokestackCount(),
 				GM->GetCumulativeCarbonKg(),
 				GM->GetTargetMinCarbonKg(),
 				GM->GetSunPocketOpenRatio() * 100.0f,
-				GM->CalculateStarRating()
-			);
+				*Stars);
 			StacksAndCO2Text->SetText(FText::FromString(Msg));
 		}
 
-		// Top: VIP Jet Warning TextBlock (IsPrivateJetAlertActive())
+		const bool bJet = GM->IsPrivateJetAlertActive();
+		const ESlateVisibility JetVis = (bJet && bBlinkOn) ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		if (JetWarningPanel) { JetWarningPanel->SetVisibility(JetVis); }
 		if (JetWarningText)
 		{
-			const bool bJet = GM->IsPrivateJetAlertActive();
 			if (bJet)
 			{
-				const FString Warning = FString::Printf(TEXT("[!] VIP JET WARNING: \"%s\""), *GM->GetActiveJetBannerSlogan().ToString());
-				JetWarningText->SetText(FText::FromString(Warning));
-				JetWarningText->SetVisibility(ESlateVisibility::Visible);
+				JetWarningText->SetText(FText::FromString(FString::Printf(TEXT("!  VIP JET INCOMING  !\n\"%s\""), *GM->GetActiveJetBannerSlogan().ToString())));
 			}
-			else
+			JetWarningText->SetVisibility(JetVis);
+		}
+	}
+}
+
+void UDoNotSmokeFlightHUDWidget::UpdateCrosshairAndCooldown(AGliderPawn* Glider)
+{
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC)
+	{
+		PC = UGameplayStatics::GetPlayerController(this, 0);
+	}
+
+	FVector2D ScreenPos = FVector2D::ZeroVector;
+	if (PC && UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(PC, Glider->GetAimWorldTargetLocation(), ScreenPos, true))
+	{
+		for (UImage* Image : { CooldownRingBase.Get(), CooldownRingFill.Get(), CooldownRingReady.Get(), CrosshairImage.Get() })
+		{
+			if (UCanvasPanelSlot* CanvasSlot = Image ? Cast<UCanvasPanelSlot>(Image->Slot) : nullptr)
 			{
-				JetWarningText->SetVisibility(ESlateVisibility::Hidden);
+				CanvasSlot->SetPosition(ScreenPos);
 			}
 		}
+	}
+
+	const bool bCoolingDown = Glider->GetSealCooldownRemaining() > 0.0f;
+
+	// Red on cooldown, green on magnetic lock, yellow when clamped to the aim cone, white otherwise
+	if (CrosshairImage)
+	{
+		FLinearColor Tint = FLinearColor::White;
+		if (bCoolingDown)
+		{
+			Tint = FLinearColor(1.0f, 0.3f, 0.3f, 0.9f);
+		}
+		else if (Glider->HasMagneticLock())
+		{
+			Tint = FLinearColor(0.3f, 1.0f, 0.45f, 1.0f);
+		}
+		else if (Glider->IsAimConeClamped())
+		{
+			Tint = FLinearColor(1.0f, 0.85f, 0.2f, 0.9f);
+		}
+		CrosshairImage->SetColorAndOpacity(Tint);
+	}
+
+	if (CooldownRingMID)
+	{
+		CooldownRingMID->SetScalarParameterValue(TEXT("Progress"), FMath::Clamp(1.0f - Glider->GetSealCooldownNormalized(), 0.0f, 1.0f));
+	}
+	if (CooldownRingFill)
+	{
+		CooldownRingFill->SetVisibility(bCoolingDown ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (CooldownRingReady)
+	{
+		CooldownRingReady->SetVisibility(bCoolingDown ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+}
+
+void UDoNotSmokeFlightHUDWidget::UpdateBattery(AGliderPawn* Glider)
+{
+	if (!BatteryFillMID)
+	{
+		return;
+	}
+
+	const float Charge = Glider->GetSolarChargePercent();
+	UTexture2D* ArcTexture = ArcChargeTexture;
+	if (Glider->IsBoosting())
+	{
+		ArcTexture = ArcBoostTexture;
+	}
+	else if (Charge < LowBatteryPercent)
+	{
+		ArcTexture = ArcLowTexture;
+	}
+
+	BatteryFillMID->SetTextureParameterValue(TEXT("Tex"), ArcTexture);
+	BatteryFillMID->SetScalarParameterValue(TEXT("Progress"), FMath::Clamp(Charge / 100.0f, 0.0f, 1.0f));
+}
+
+void UDoNotSmokeFlightHUDWidget::UpdateAltimeter(AGliderPawn* Glider)
+{
+	UCanvasPanelSlot* ArrowSlot = AltimeterArrow ? Cast<UCanvasPanelSlot>(AltimeterArrow->Slot) : nullptr;
+	if (!ArrowSlot)
+	{
+		return;
+	}
+
+	// Arrow tip sits on the ruler's tick column; Y follows the ruler's colour bands
+	const float RulerLeftX = HUDLayout::RulerPosition.X - HUDLayout::RulerSize.X;
+	const float ArrowX = RulerLeftX + HUDLayout::RulerSize.X * HUDLayout::RulerTickU;
+	const float ArrowY = (AltitudeToRulerV(Glider->GetCurrentAltitude()) - 0.5f) * HUDLayout::RulerSize.Y;
+	ArrowSlot->SetPosition(FVector2D(ArrowX, ArrowY));
+}
+
+// ==========================================
+// UDoNotSmokeCrashWidget Implementation
+// ==========================================
+
+UDoNotSmokeCrashWidget::UDoNotSmokeCrashWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	using namespace DoNotSmokeUI;
+	CrackOverlayTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_CrackOverlay.T_UI_CrackOverlay"));
+	GroundCrashTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_GliderDive.T_UI_GliderDive"));
+	SmokestackCrashTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_SmokestackBurst.T_UI_SmokestackBurst"));
+	ToxicPlumeCrashTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_SmokeWarning.T_UI_SmokeWarning"));
+	KeycapTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Keycap.T_UI_Keycap"));
+
+	SetIsFocusable(true);
+}
+
+void UDoNotSmokeCrashWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+	BuildFallbackWidgetTree();
+
+	if (RestartButton)
+	{
+		RestartButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeCrashWidget::HandleRestartClicked);
+	}
+}
+
+TSharedRef<SWidget> UDoNotSmokeCrashWidget::RebuildWidget()
+{
+	BuildFallbackWidgetTree();
+	return Super::RebuildWidget();
+}
+
+void UDoNotSmokeCrashWidget::BuildFallbackWidgetTree()
+{
+	using namespace DoNotSmokeUI;
+
+	if (bBuiltFallbackTree)
+	{
+		return;
+	}
+
+	if (!WidgetTree)
+	{
+		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
+	}
+
+	if (WidgetTree->RootWidget != nullptr)
+	{
+		bBuiltFallbackTree = true;
+		return;
+	}
+
+	UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("CrashRootCanvas"));
+	WidgetTree->RootWidget = RootCanvas;
+
+	const FVector2D Centered(0.5f, 0.5f);
+
+	// 1. Cracked-glass vignette stretched over the whole screen
+	CrackOverlay = AddImage(WidgetTree, RootCanvas, TEXT("CrackOverlay"), CrackOverlayTexture, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+	if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CrackOverlay->Slot))
+	{
+		Slot->SetOffsets(FMargin(0.0f));
+	}
+
+	// 2. Cause icon + label
+	CauseIcon = AddImage(WidgetTree, RootCanvas, TEXT("CauseIcon"), GroundCrashTexture, FAnchors(0.5f, 0.4f), Centered, FVector2D::ZeroVector, FVector2D(340.0f, 340.0f));
+	CauseText = MakeText(WidgetTree, TEXT("CauseText"), 40, FLinearColor(1.0f, 0.95f, 0.9f, 1.0f));
+	AddText(RootCanvas, CauseText, FAnchors(0.5f, 0.62f), FVector2D::ZeroVector);
+
+	// 3. Restart button on the keycap texture
+	RestartButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("RestartButton"));
+	if (KeycapTexture)
+	{
+		FSlateBrush KeycapBrush;
+		KeycapBrush.SetResourceObject(KeycapTexture);
+		KeycapBrush.ImageSize = FVector2D(KeycapTexture->GetSizeX(), KeycapTexture->GetSizeY());
+		KeycapBrush.DrawAs = ESlateBrushDrawType::Image;
+
+		FButtonStyle Style = RestartButton->GetStyle();
+		Style.Normal = KeycapBrush;
+		Style.Hovered = KeycapBrush;
+		Style.Hovered.TintColor = FSlateColor(FLinearColor(1.15f, 1.15f, 1.15f, 1.0f));
+		Style.Pressed = KeycapBrush;
+		Style.Pressed.TintColor = FSlateColor(FLinearColor(0.75f, 0.75f, 0.75f, 1.0f));
+		Style.NormalPadding = FMargin(0.0f);
+		Style.PressedPadding = FMargin(0.0f, 4.0f, 0.0f, 0.0f);
+		RestartButton->SetStyle(Style);
+	}
+
+	RestartText = MakeText(WidgetTree, TEXT("RestartText"), 30, FLinearColor(0.12f, 0.13f, 0.16f, 1.0f));
+	RestartText->SetText(FText::FromString(TEXT("RESTART  [R]")));
+	RestartButton->AddChild(RestartText);
+
+	if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(RestartButton))
+	{
+		Slot->SetAnchors(FAnchors(0.5f, 0.78f));
+		Slot->SetAlignment(Centered);
+		Slot->SetSize(FVector2D(440.0f, 110.0f));
+	}
+
+	bBuiltFallbackTree = true;
+}
+
+void UDoNotSmokeCrashWidget::SetCrashCause(EGliderCrashCause Cause)
+{
+	UTexture2D* Icon = GroundCrashTexture;
+	FString Label = TEXT("GROUND IMPACT");
+
+	switch (Cause)
+	{
+	case EGliderCrashCause::Smokestack:
+		Icon = SmokestackCrashTexture;
+		Label = TEXT("SMOKESTACK COLLISION");
+		break;
+	case EGliderCrashCause::ToxicPlume:
+		Icon = ToxicPlumeCrashTexture;
+		Label = TEXT("CHOKED IN TOXIC PLUME");
+		break;
+	default:
+		break;
+	}
+
+	if (CauseIcon && Icon)
+	{
+		CauseIcon->SetBrushFromTexture(Icon, false);
+	}
+	if (CauseText)
+	{
+		CauseText->SetText(FText::FromString(Label));
+	}
+}
+
+FReply UDoNotSmokeCrashWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	const FKey Key = InKeyEvent.GetKey();
+	if (Key == EKeys::R || Key == EKeys::Enter || Key == EKeys::SpaceBar)
+	{
+		HandleRestartClicked();
+		return FReply::Handled();
+	}
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+void UDoNotSmokeCrashWidget::HandleRestartClicked()
+{
+	if (ADoNotSmokeGameMode* GM = Cast<ADoNotSmokeGameMode>(UGameplayStatics::GetGameMode(this)))
+	{
+		GM->TriggerInstantRestart();
 	}
 }
 
@@ -424,6 +709,8 @@ ADoNotSmokeGameMode::ADoNotSmokeGameMode()
 	{
 		SummaryWidgetClass = UDoNotSmokeSummaryWidget::StaticClass();
 	}
+
+	CrashWidgetClass = UDoNotSmokeCrashWidget::StaticClass();
 }
 
 void ADoNotSmokeGameMode::BeginPlay()
@@ -438,6 +725,7 @@ void ADoNotSmokeGameMode::BeginPlay()
 	ElapsedLevelSeconds = 0.0f;
 	SunPocketOpenRatio = 1.0f;
 	bIsLevelCompleted = false;
+	bHasGliderCrashed = false;
 	bIsPrivateJetAlertActive = false;
 	ActiveJetBannerSlogan = FText::GetEmpty();
 
@@ -512,7 +800,7 @@ void ADoNotSmokeGameMode::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bIsLevelCompleted)
+	if (bIsLevelCompleted || bHasGliderCrashed)
 	{
 		return;
 	}
@@ -597,6 +885,12 @@ void ADoNotSmokeGameMode::TriggerInstantRestart()
 {
 	if (UWorld* World = GetWorld())
 	{
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+		{
+			PC->SetInputMode(FInputModeGameOnly());
+			PC->SetShowMouseCursor(false);
+		}
+
 		const FString CurrentMapName = UGameplayStatics::GetCurrentLevelName(World, true);
 		UGameplayStatics::OpenLevel(World, FName(*CurrentMapName));
 	}
@@ -655,10 +949,36 @@ void ADoNotSmokeGameMode::HandleSmokestackSealed(ASmokestack* SealedStack)
 
 void ADoNotSmokeGameMode::HandleGliderCrashed(AActor* CrashedGlider)
 {
-	if (!bIsLevelCompleted)
+	if (bIsLevelCompleted || bHasGliderCrashed)
+	{
+		return;
+	}
+
+	bHasGliderCrashed = true;
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	TSubclassOf<UDoNotSmokeCrashWidget> TargetCrashClass = CrashWidgetClass ? CrashWidgetClass : TSubclassOf<UDoNotSmokeCrashWidget>(UDoNotSmokeCrashWidget::StaticClass());
+	CrashWidget = PC ? CreateWidget<UDoNotSmokeCrashWidget>(PC, TargetCrashClass) : nullptr;
+	if (!CrashWidget)
 	{
 		TriggerInstantRestart();
+		return;
 	}
+
+	const AGliderPawn* Glider = Cast<AGliderPawn>(CrashedGlider);
+	CrashWidget->SetCrashCause(Glider ? Glider->GetLastCrashCause() : EGliderCrashCause::Ground);
+	CrashWidget->AddToViewport(30);
+
+	if (FlightHUDWidget)
+	{
+		FlightHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(CrashWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PC->SetInputMode(InputMode);
+	PC->SetShowMouseCursor(true);
 }
 
 void ADoNotSmokeGameMode::HandlePrivateJetApproachChanged(bool bIsApproaching, FText BannerSlogan)

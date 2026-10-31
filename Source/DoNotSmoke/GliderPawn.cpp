@@ -417,7 +417,7 @@ void AGliderPawn::UpdateSolarEnergyAndAltitudeChecks(float DeltaTime)
 	// 1. Kill Floor (200u) Crash check
 	if (CurrentZ <= KillFloorAltitude)
 	{
-		TriggerCrash();
+		TriggerCrash(EGliderCrashCause::Ground);
 		return;
 	}
 
@@ -641,7 +641,7 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 	return DesiredAimDir;
 }
 
-void AGliderPawn::TriggerCrash()
+void AGliderPawn::TriggerCrash(EGliderCrashCause Cause)
 {
 	if (bHasCrashed)
 	{
@@ -649,6 +649,7 @@ void AGliderPawn::TriggerCrash()
 	}
 
 	bHasCrashed = true;
+	LastCrashCause = Cause;
 	OnGliderCrashed.Broadcast(this);
 }
 
@@ -667,9 +668,10 @@ void AGliderPawn::HandleGliderOverlap(
 
 	if (OtherActor->Implements<UBPI_FlightHazard>())
 	{
+		// The only lethal overlap volume is the Type C heavy smoke pillar
 		if (IBPI_FlightHazard::Execute_IsLethalCrashHazard(OtherActor, OtherComp))
 		{
-			TriggerCrash();
+			TriggerCrash(EGliderCrashCause::ToxicPlume);
 			return;
 		}
 
@@ -698,12 +700,12 @@ void AGliderPawn::HandleGliderHit(
 	{
 		if (IBPI_FlightHazard::Execute_IsLethalCrashHazard(OtherActor, OtherComp))
 		{
-			TriggerCrash();
+			TriggerCrash(EGliderCrashCause::Smokestack);
 			return;
 		}
 	}
 	else
 	{
-		TriggerCrash();
+		TriggerCrash(EGliderCrashCause::Ground);
 	}
 }

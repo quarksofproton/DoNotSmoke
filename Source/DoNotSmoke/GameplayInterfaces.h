@@ -8,6 +8,15 @@
 
 class UPrimitiveComponent;
 
+/** What killed the glider; drives the crash screen icon. */
+UENUM(BlueprintType)
+enum class EGliderCrashCause : uint8
+{
+	Ground		UMETA(DisplayName = "Ground Impact"),
+	Smokestack	UMETA(DisplayName = "Smokestack Collision"),
+	ToxicPlume	UMETA(DisplayName = "Toxic Plume")
+};
+
 /**
  * Contract for pollution sources (e.g., industrial smokestacks) that can be
  * targeted by magnetic aim-assist and sealed by a Carbon Seal projectile.
