@@ -1,0 +1,31 @@
+# Unreal Engine Generated Directories
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# IDE & Compiler Files
+.vs/
+.vscode/
+.idea/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+*.code-workspace
+.clangd/
+compile_commands.json
+
+# OS Generated
+.DS_Store
+Thumbs.db
+*~
+
+# Unused Starter Template Heavy Assets
+Content/Characters/
+
