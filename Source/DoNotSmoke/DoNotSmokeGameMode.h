@@ -62,8 +62,13 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UImage> AltimeterArrow;
 
+	/** Left slot of the top bar: open stacks, sun pockets and live star rating. */
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UTextBlock> StacksAndCO2Text;
+
+	/** Right slot of the top bar: cumulative CO2 against C_min, next to the smoke cloud icon. */
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UTextBlock> CarbonStatusText;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UImage> JetWarningPanel;
@@ -126,6 +131,9 @@ protected:
 	TObjectPtr<UTexture2D> TopBarTexture;
 
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
+	TObjectPtr<UTexture2D> CarbonIconTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
 	TObjectPtr<UTexture2D> WarningPanelTexture;
 
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
@@ -146,6 +154,7 @@ private:
 
 	/** Last text pushed to StacksAndCO2Text, so SetText only runs when the string changes. */
 	FString LastStatusText;
+	FString LastCarbonText;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> CooldownRingMID;
@@ -223,7 +232,8 @@ private:
 };
 
 /**
- * Satirical COP31 Newspaper and Performance Summary Widget displayed upon level completion.
+ * Satirical COP31 newspaper front page shown on level completion. Spins in, swaps the
+ * valley photo by star rating (grim / clearing / sunny) and restarts on R / Enter / Space.
  */
 UCLASS(Blueprintable)
 class DONOTSMOKE_API UDoNotSmokeSummaryWidget : public UUserWidget
@@ -234,9 +244,17 @@ public:
 	UDoNotSmokeSummaryWidget(const FObjectInitializer& ObjectInitializer);
 
 	virtual void NativeOnInitialized() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Summary")
-	void SetupSummaryData(int32 InStars, float InCarbonKg, float InTimeSeconds, float InAccuracyPercent, const FText& InHeadline);
+	void SetupSummaryData(int32 InStars, float InCarbonKg, float InTargetCarbonKg, float InTimeSeconds, float InAccuracyPercent, const FText& InHeadline);
+
+	/** Newspaper page container; spun and scaled in on reveal. */
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UCanvasPanel> PagePanel;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UImage> PhotoImage;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
 	TObjectPtr<UTextBlock> HeadlineText;
@@ -253,15 +271,32 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
 	TObjectPtr<UTextBlock> AccuracyText;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
-	TObjectPtr<UTextBlock> SummaryDetailsText;
-
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
+	TObjectPtr<UTexture2D> NewspaperTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
+	TObjectPtr<UTexture2D> ProhibitionTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
+	TObjectPtr<UTexture2D> StackPuffTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
+	TObjectPtr<UTexture2D> CarbonIconTexture;
+
+	/** Valley photo per star rating: index 0 = 1 star (grim), 1 = 2 stars (clearing), 2 = 3 stars (sunny). */
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
+	TArray<TObjectPtr<UTexture2D>> ValleyPhotoTextures;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Tuning")
+	float RevealDuration = 0.9f;
+
 private:
 	bool bBuiltFallbackTree = false;
+	float RevealElapsed = 0.0f;
 
 	void BuildFallbackWidgetTree();
 };
@@ -348,6 +383,10 @@ public:
 	/** Records a projectile launch for post-level accuracy statistics. */
 	UFUNCTION(BlueprintCallable, Category = "DoNotSmoke|Score")
 	void NotifyCarbonSealFired();
+
+	/** Console: finishes the level with the given star rating so the summary screen can be tested. */
+	UFUNCTION(Exec, Category = "DoNotSmoke|Debug")
+	void DebugForceLevelComplete(int32 Stars = 3);
 
 	/** Reloads the active level (called from the crash screen restart button). */
 	UFUNCTION(BlueprintCallable, Category = "DoNotSmoke|Flow")
