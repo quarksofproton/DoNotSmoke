@@ -246,7 +246,7 @@ private:
 	float AimAssistConeHalfAngleDeg = 10.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Combat", meta = (AllowPrivateAccess = "true"))
-	float AimAssistMaxRange = 20000.0f;
+	float AimAssistMaxRange = 12000.0f;
 
 	// ==========================================
 	// INTERNAL RUNTIME STATE
