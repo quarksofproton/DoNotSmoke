@@ -25,7 +25,7 @@ ACarbonSealProjectile::ACarbonSealProjectile()
 	CapsuleMesh->SetRelativeScale3D(FVector(0.25f, 0.25f, 0.25f));
 	CapsuleMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealCapMeshAsset(TEXT("/Game/Game/Meshes/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealCapMeshAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
 	if (SealCapMeshAsset.Succeeded())
 	{
 		CapsuleMesh->SetStaticMesh(SealCapMeshAsset.Object);
@@ -38,11 +38,20 @@ ACarbonSealProjectile::ACarbonSealProjectile()
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->bShouldBounce = false;
 	ProjectileMovement->ProjectileGravityScale = ProjectileGravityScale;
+	ProjectileMovement->bInitialVelocityInLocalSpace = false;
 }
 
 void ACarbonSealProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (CapsuleMesh && (!CapsuleMesh->GetStaticMesh() || !CapsuleMesh->GetStaticMesh()->GetPathName().Contains(TEXT("Rev3"))))
+	{
+		if (UStaticMesh* Rev3Seal = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single")))
+		{
+			CapsuleMesh->SetStaticMesh(Rev3Seal);
+		}
+	}
 
 	SetLifeSpan(MaxLifeSeconds);
 
@@ -112,6 +121,7 @@ void ACarbonSealProjectile::InitializeLaunch(const FVector& LaunchDirection, AAc
 	if (ProjectileMovement && !SafeDir.IsNearlyZero())
 	{
 		ProjectileMovement->Velocity = SafeDir * LaunchSpeed;
+		ProjectileMovement->UpdateComponentVelocity();
 	}
 }
 

@@ -41,7 +41,7 @@ AGliderPawn::AGliderPawn()
 	GreyboxGliderMesh->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.42f));
 	GreyboxGliderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SolarGliderMeshAsset(TEXT("/Game/Game/Meshes/SM_SolarGlider/StaticMeshes/SM_SolarGlider.SM_SolarGlider"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SolarGliderMeshAsset(TEXT("/Game/Game/Meshes/SM_SolarGlider_V2/SM_SolarGlider/StaticMeshes/SM_SolarGlider.SM_SolarGlider"));
 	if (SolarGliderMeshAsset.Succeeded())
 	{
 		GreyboxGliderMesh->SetStaticMesh(SolarGliderMeshAsset.Object);
@@ -74,6 +74,15 @@ AGliderPawn::AGliderPawn()
 void AGliderPawn::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (GreyboxGliderMesh)
+	{
+		UStaticMesh* V2Glider = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Game/Meshes/SM_SolarGlider_V2/SM_SolarGlider/StaticMeshes/SM_SolarGlider.SM_SolarGlider"));
+		if (V2Glider)
+		{
+			GreyboxGliderMesh->SetStaticMesh(V2Glider);
+		}
+	}
 
 	CurrentSpeed = BaseVelocity;
 	SolarCharge = 100.0f;
@@ -166,15 +175,17 @@ void AGliderPawn::Tick(float DeltaTime)
 	UpdateFlightKinematics(DeltaTime);
 	UpdateDecoupledCamera(DeltaTime);
 
+	// Compute aim direction unconditionally every frame so CachedAimWorldTarget,
+	// bIsAimClampedToCone, and bHasMagneticRimLock are kept live for UMG HUD & targeting
+	AActor* LockedTarget = nullptr;
+	FVector LockedRimPos = FVector::ZeroVector;
+	const FVector ClampedAimDir = ComputeClampedAimDirection(LockedTarget, LockedRimPos);
+
 	if (bShowDebugHUD && GEngine)
 	{
-		AActor* LockedTarget = nullptr;
-		FVector LockedRimPos = FVector::ZeroVector;
-		const FVector ClampedAimDir = ComputeClampedAimDirection(LockedTarget, LockedRimPos);
-
 		if (UWorld* World = GetWorld())
 		{
-			const FVector AimReticleWorldPos = GetActorLocation() + ClampedAimDir * 1200.0f;
+			const FVector AimReticleWorldPos = GetProjectileSpawnLocation() + ClampedAimDir * 1200.0f;
 			const FColor ReticleColor = (SealCooldownRemaining > 0.0f) ? FColor::Red : (LockedTarget ? FColor::Green : FColor::Cyan);
 			DrawDebugSphere(World, AimReticleWorldPos, 28.0f, 12, ReticleColor, false, -1.0f, 0, 3.0f);
 
@@ -236,7 +247,7 @@ void AGliderPawn::RefreshKeyAxisInputs()
 
 void AGliderPawn::InputLookYaw(float AxisValue)
 {
-	CameraYawOffset = FMath::Clamp(CameraYawOffset + AxisValue * MouseSensitivity, -110.0f, 110.0f);
+	CameraYawOffset = FMath::Clamp(CameraYawOffset + AxisValue * MouseSensitivity, -85.0f, 85.0f);
 }
 
 void AGliderPawn::InputLookPitch(float AxisValue)
@@ -271,7 +282,7 @@ void AGliderPawn::FireCarbonSeal()
 	FVector MagneticRimLocation = FVector::ZeroVector;
 	const FVector LaunchDir = ComputeClampedAimDirection(MagneticTarget, MagneticRimLocation);
 
-	const FVector SpawnLocation = GetActorLocation() + GetActorForwardVector() * 140.0f - FVector(0.0f, 0.0f, 30.0f);
+	const FVector SpawnLocation = GetProjectileSpawnLocation();
 	const FRotator SpawnRotation = LaunchDir.Rotation();
 
 	FActorSpawnParameters SpawnParams;
@@ -514,79 +525,118 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 	OutMagneticTarget = nullptr;
 	OutMagneticRimLocation = FVector::ZeroVector;
 
+	const FVector SpawnLoc = GetProjectileSpawnLocation();
 	const FVector GliderForward = GetActorForwardVector().GetSafeNormal();
-	FVector DesiredAimDir = FollowCamera ? FollowCamera->GetForwardVector().GetSafeNormal() : GliderForward;
+	const FVector CamLoc = FollowCamera ? FollowCamera->GetComponentLocation() : SpawnLoc;
+	const FVector CamDir = FollowCamera ? FollowCamera->GetForwardVector().GetSafeNormal() : GliderForward;
 
-	// 1. Clamp aim direction strictly within 45-degree cone around Glider Forward Vector
-	const float MaxConeRadians = FMath::DegreesToRadians(MaxAimConeHalfAngleDeg);
-	const float CurrentAngleRadians = FMath::Acos(FVector::DotProduct(GliderForward, DesiredAimDir));
-
-	if (CurrentAngleRadians > MaxConeRadians && CurrentAngleRadians > KINDA_SMALL_NUMBER)
-	{
-		const FVector RotationAxis = FVector::CrossProduct(GliderForward, DesiredAimDir).GetSafeNormal();
-		if (!RotationAxis.IsNearlyZero())
-		{
-			DesiredAimDir = FQuat(RotationAxis, MaxConeRadians).RotateVector(GliderForward).GetSafeNormal();
-		}
-		else
-		{
-			DesiredAimDir = GliderForward;
-		}
-	}
-
-	// 2. Subtle ~10-degree Magnetic Aim Assist scan over all unsealed rims across IBPI_SealableTarget actors
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return DesiredAimDir;
-	}
-
+	const float MaxConeCos = FMath::Cos(FMath::DegreesToRadians(MaxAimConeHalfAngleDeg));
 	const float MinAssistCos = FMath::Cos(FMath::DegreesToRadians(AimAssistConeHalfAngleDeg));
 	float BestDot = MinAssistCos;
 
-	TArray<AActor*> SealableActors;
-	UGameplayStatics::GetAllActorsWithInterface(World, UBPI_SealableTarget::StaticClass(), SealableActors);
+	// Track depth along camera ray for convergence (defaulting to 3000u, clamped 800u .. 5000u)
+	float ClosestDepthAlongCamRay = 3000.0f;
+	float BestAlignForDepth = 0.5f;
 
-	const FVector GliderLoc = GetActorLocation();
-	for (AActor* Candidate : SealableActors)
+	if (UWorld* World = GetWorld())
 	{
-		if (!Candidate || IBPI_SealableTarget::Execute_IsTargetSealed(Candidate))
-		{
-			continue;
-		}
+		TArray<AActor*> SealableActors;
+		UGameplayStatics::GetAllActorsWithInterface(World, UBPI_SealableTarget::StaticClass(), SealableActors);
 
-		TArray<FVector> CandidateRims = IBPI_SealableTarget::Execute_GetUnsealedRimLocations(Candidate);
-		if (CandidateRims.Num() == 0)
+		for (AActor* Candidate : SealableActors)
 		{
-			CandidateRims.Add(IBPI_SealableTarget::Execute_GetTargetRimLocation(Candidate));
-		}
-
-		for (const FVector& RimLoc : CandidateRims)
-		{
-			const FVector ToRim = RimLoc - GliderLoc;
-			const float DistSq = ToRim.SizeSquared();
-
-			if (DistSq > FMath::Square(AimAssistMaxRange) || DistSq < 100.0f)
+			if (!Candidate || IBPI_SealableTarget::Execute_IsTargetSealed(Candidate))
 			{
 				continue;
 			}
 
-			const FVector DirToRim = ToRim.GetSafeNormal();
-			// Target must also lie within the 45-degree forward cone
-			if (FVector::DotProduct(GliderForward, DirToRim) < FMath::Cos(MaxConeRadians))
+			TArray<FVector> CandidateRims = IBPI_SealableTarget::Execute_GetUnsealedRimLocations(Candidate);
+			if (CandidateRims.Num() == 0)
 			{
-				continue;
+				CandidateRims.Add(IBPI_SealableTarget::Execute_GetTargetRimLocation(Candidate));
 			}
 
-			const float AimDot = FVector::DotProduct(DesiredAimDir, DirToRim);
-			if (AimDot > BestDot)
+			for (const FVector& RimLoc : CandidateRims)
 			{
-				BestDot = AimDot;
-				OutMagneticTarget = Candidate;
-				OutMagneticRimLocation = RimLoc;
+				const FVector ToRimCam = RimLoc - CamLoc;
+				const float CamDistSq = ToRimCam.SizeSquared();
+				if (CamDistSq > FMath::Square(AimAssistMaxRange) || CamDistSq < 100.0f)
+				{
+					continue;
+				}
+
+				const float DepthAlongCam = FVector::DotProduct(ToRimCam, CamDir);
+				if (DepthAlongCam <= 100.0f)
+				{
+					continue;
+				}
+
+				const FVector DirFromCam = ToRimCam.GetSafeNormal();
+				const FVector DirFromSpawn = (RimLoc - SpawnLoc).GetSafeNormal();
+
+				// Verify that (RimLoc - SpawnLoc).GetSafeNormal() is within MaxAimConeHalfAngleDeg (75 deg) of GliderForward
+				if (FVector::DotProduct(GliderForward, DirFromSpawn) < MaxConeCos)
+				{
+					continue;
+				}
+
+				const float AimDot = FVector::DotProduct(CamDir, DirFromCam);
+
+				// Track depth of aligned unsealed rims in front of the camera
+				if (AimDot > BestAlignForDepth)
+				{
+					BestAlignForDepth = AimDot;
+					ClosestDepthAlongCamRay = FMath::Clamp(DepthAlongCam, 800.0f, 20000.0f);
+				}
+
+				// Check magnetic lock within assist cone
+				if (AimDot > BestDot)
+				{
+					BestDot = AimDot;
+					OutMagneticTarget = Candidate;
+					OutMagneticRimLocation = RimLoc;
+					ClosestDepthAlongCamRay = FMath::Clamp(DepthAlongCam, 800.0f, 20000.0f);
+				}
 			}
 		}
 	}
+
+	FVector WorldTargetPoint = FVector::ZeroVector;
+	FVector DesiredAimDir = GliderForward;
+	bool bClamped = false;
+
+	if (OutMagneticTarget != nullptr && !OutMagneticRimLocation.IsNearlyZero())
+	{
+		WorldTargetPoint = OutMagneticRimLocation;
+		DesiredAimDir = (OutMagneticRimLocation - SpawnLoc).GetSafeNormal();
+		bClamped = false;
+	}
+	else
+	{
+		WorldTargetPoint = CamLoc + CamDir * ClosestDepthAlongCamRay;
+		DesiredAimDir = (WorldTargetPoint - SpawnLoc).GetSafeNormal();
+
+		const float DotWithGlider = FVector::DotProduct(GliderForward, DesiredAimDir);
+		if (DotWithGlider < MaxConeCos)
+		{
+			bClamped = true;
+			const float MaxConeRadians = FMath::DegreesToRadians(MaxAimConeHalfAngleDeg);
+			const FVector RotationAxis = FVector::CrossProduct(GliderForward, DesiredAimDir).GetSafeNormal();
+			if (!RotationAxis.IsNearlyZero())
+			{
+				DesiredAimDir = FQuat(RotationAxis, MaxConeRadians).RotateVector(GliderForward).GetSafeNormal();
+			}
+			else
+			{
+				DesiredAimDir = GliderForward;
+			}
+			WorldTargetPoint = SpawnLoc + DesiredAimDir * ClosestDepthAlongCamRay;
+		}
+	}
+
+	CachedAimWorldTarget = WorldTargetPoint;
+	bIsAimClampedToCone = bClamped;
+	bHasMagneticRimLock = (OutMagneticTarget != nullptr);
 
 	return DesiredAimDir;
 }

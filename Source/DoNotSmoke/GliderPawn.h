@@ -80,6 +80,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Glider|Hazards")
 	void ApplyWakeTurbulence(float DownwashSpeed, float DurationSeconds);
 
+	UFUNCTION(BlueprintCallable, Category = "Glider|Debug")
+	void SetShowDebugHUD(bool bShow) { bShowDebugHUD = bShow; }
+
+	UFUNCTION(BlueprintPure, Category = "Glider|Debug")
+	bool GetShowDebugHUD() const { return bShowDebugHUD; }
+
+	/** Muzzle / projectile launch origin offset from glider nose. */
+	UFUNCTION(BlueprintPure, Category = "Glider|Combat")
+	FVector GetProjectileSpawnLocation() const { return GetActorLocation() + GetActorForwardVector() * 140.0f - FVector(0.0f, 0.0f, 30.0f); }
+
+	UFUNCTION(BlueprintPure, Category = "Glider|Combat")
+	FVector GetAimWorldTargetLocation() const { return CachedAimWorldTarget; }
+
+	UFUNCTION(BlueprintPure, Category = "Glider|Combat")
+	bool IsAimConeClamped() const { return bIsAimClampedToCone; }
+
+	UFUNCTION(BlueprintPure, Category = "Glider|Combat")
+	bool HasMagneticLock() const { return bHasMagneticRimLock; }
+
 	// ==========================================
 	// INPUT ACTIONS (Zero-Setup C++ & Blueprint Callable)
 	// ==========================================
@@ -222,13 +241,13 @@ private:
 	float SealCooldownDuration = 5.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Combat", meta = (AllowPrivateAccess = "true"))
-	float MaxAimConeHalfAngleDeg = 45.0f;
+	float MaxAimConeHalfAngleDeg = 135.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Combat", meta = (AllowPrivateAccess = "true"))
 	float AimAssistConeHalfAngleDeg = 10.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Combat", meta = (AllowPrivateAccess = "true"))
-	float AimAssistMaxRange = 8000.0f;
+	float AimAssistMaxRange = 20000.0f;
 
 	/** Displays live C++ debug telemetry and 45-degree aim indicator on screen before UMG HUD is wired. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Glider|Debug", meta = (AllowPrivateAccess = "true"))
@@ -252,6 +271,10 @@ private:
 
 	float ActiveDownwashSpeed = 0.0f;
 	float DownwashTimeRemaining = 0.0f;
+
+	mutable FVector CachedAimWorldTarget = FVector::ZeroVector;
+	mutable bool bIsAimClampedToCone = false;
+	mutable bool bHasMagneticRimLock = false;
 
 	bool bIsSolarBoostInputHeld = false;
 	bool bIsSolarBoosting = false;

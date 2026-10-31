@@ -4,10 +4,101 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Blueprint/UserWidget.h"
 #include "DoNotSmokeGameMode.generated.h"
 
+class UProgressBar;
+class UTextBlock;
+class AGliderPawn;
 class ASmokestack;
 class APrivateJet;
+class ADoNotSmokeGameMode;
+
+/**
+ * Live flight HUD displaying altitude, solar battery charge, crosshair & carbon seal cooldown,
+ * sector carbon telemetry, and pull up / VIP jet warnings.
+ */
+UCLASS(Blueprintable)
+class DONOTSMOKE_API UDoNotSmokeFlightHUDWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	virtual void NativeOnInitialized() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UProgressBar> AltitudeBar;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UProgressBar> SolarBatteryBar;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UProgressBar> SealCooldownBar;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UTextBlock> StacksAndCO2Text;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UTextBlock> JetWarningText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UTextBlock> PullUpWarningText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UTextBlock> CrosshairText;
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+
+private:
+	TWeakObjectPtr<AGliderPawn> CachedGlider;
+	TWeakObjectPtr<ADoNotSmokeGameMode> CachedGameMode;
+	bool bBuiltFallbackTree = false;
+
+	void BuildFallbackWidgetTree();
+};
+
+/**
+ * Satirical COP31 Newspaper and Performance Summary Widget displayed upon level completion.
+ */
+UCLASS(Blueprintable)
+class DONOTSMOKE_API UDoNotSmokeSummaryWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	virtual void NativeOnInitialized() override;
+
+	UFUNCTION(BlueprintCallable, Category = "Summary")
+	void SetupSummaryData(int32 InStars, float InCarbonKg, float InTimeSeconds, float InAccuracyPercent, const FText& InHeadline);
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UTextBlock> HeadlineText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UTextBlock> StarsText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UTextBlock> CarbonText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UTextBlock> TimeText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UTextBlock> AccuracyText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UTextBlock> SummaryDetailsText;
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+
+private:
+	bool bBuiltFallbackTree = false;
+
+	void BuildFallbackWidgetTree();
+};
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
 	FOnLevelCompletedSignature,
@@ -49,6 +140,12 @@ public:
 	// ==========================================
 	UFUNCTION(BlueprintPure, Category = "DoNotSmoke|Score")
 	int32 GetOpenSmokestackCount() const { return OpenSmokestackCount; }
+
+	UFUNCTION(BlueprintPure, Category = "DoNotSmoke|UI")
+	UDoNotSmokeFlightHUDWidget* GetFlightHUDWidget() const { return FlightHUDWidget; }
+
+	UFUNCTION(BlueprintPure, Category = "DoNotSmoke|UI")
+	UDoNotSmokeSummaryWidget* GetSummaryWidget() const { return SummaryWidget; }
 
 	UFUNCTION(BlueprintPure, Category = "DoNotSmoke|Score")
 	int32 GetTotalSmokestackCount() const { return TotalSmokestackCount; }
@@ -96,6 +193,18 @@ protected:
 	/** Blueprint hook fired when all smokestacks in the sector are sealed. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "DoNotSmoke|Flow", meta = (DisplayName = "On Level Completed"))
 	void BP_OnLevelCompleted(int32 StarRating, float FinalCarbonKg, float FinalTimeSeconds, float AccuracyPercent);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	TSubclassOf<UDoNotSmokeFlightHUDWidget> FlightHUDWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	TSubclassOf<UDoNotSmokeSummaryWidget> SummaryWidgetClass;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	TObjectPtr<UDoNotSmokeFlightHUDWidget> FlightHUDWidget;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	TObjectPtr<UDoNotSmokeSummaryWidget> SummaryWidget;
 
 private:
 	// ==========================================

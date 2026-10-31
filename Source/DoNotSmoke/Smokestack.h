@@ -11,6 +11,7 @@ class UStaticMeshComponent;
 class USphereComponent;
 class UCapsuleComponent;
 class UNiagaraComponent;
+class UNiagaraSystem;
 class ASmokestack;
 
 UENUM(BlueprintType)
@@ -204,6 +205,12 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UStaticMesh> SealMeshHeavy;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> ToxicSmogSystem;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> CleanSteamSystem;
 
 	// ==========================================
 	// INTERNAL STATE

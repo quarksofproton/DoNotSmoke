@@ -7,6 +7,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
 
 ASmokestack::ASmokestack()
@@ -39,7 +40,7 @@ ASmokestack::ASmokestack()
 	{
 		USphereComponent* Comp = CreateDefaultSubobject<USphereComponent>(Name);
 		Comp->SetupAttachment(SceneRoot);
-		Comp->SetRelativeLocation(FVector(0.0f, 0.0f, 1280.0f));
+		Comp->SetRelativeLocation(FVector(0.0f, 0.0f, 1200.0f));
 		Comp->InitSphereRadius(RimSphereRadius);
 		Comp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		Comp->SetCollisionResponseToAllChannels(ECR_Overlap);
@@ -99,53 +100,79 @@ ASmokestack::ASmokestack()
 	CleanSteamVFX_2 = InitVFX(TEXT("CleanSteamVFX_2"), RimTargetSphere_2, false);
 	CleanSteamVFX_3 = InitVFX(TEXT("CleanSteamVFX_3"), RimTargetSphere_3, false);
 
-	// Load imported Do Not Smoke modular chimney & seal cap meshes
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SingleAsset(TEXT("/Game/Game/Meshes/SM_Smokestack_Single/StaticMeshes/SM_Smokestack_Single.SM_Smokestack_Single"));
+	// Load imported Do Not Smoke modular chimney & seal cap meshes (Revision 3)
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SingleAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Single/StaticMeshes/SM_Smokestack_Single.SM_Smokestack_Single"));
 	if (SingleAsset.Succeeded())
 	{
 		MeshSingle = SingleAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> ClusterAsset(TEXT("/Game/Game/Meshes/SM_Smokestack_Cluster/StaticMeshes/SM_Smokestack_Cluster.SM_Smokestack_Cluster"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> ClusterAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster/StaticMeshes/SM_Smokestack_Cluster.SM_Smokestack_Cluster"));
 	if (ClusterAsset.Succeeded())
 	{
 		MeshCluster = ClusterAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster2Asset(TEXT("/Game/Game/Meshes/SM_Smokestack_Cluster_2/StaticMeshes/SM_Smokestack_Cluster_2.SM_Smokestack_Cluster_2"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster2Asset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_2/StaticMeshes/SM_Smokestack_Cluster_2.SM_Smokestack_Cluster_2"));
 	if (Cluster2Asset.Succeeded())
 	{
 		MeshCluster2 = Cluster2Asset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster3Asset(TEXT("/Game/Game/Meshes/SM_Smokestack_Cluster_3/StaticMeshes/SM_Smokestack_Cluster_3.SM_Smokestack_Cluster_3"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster3Asset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_3/StaticMeshes/SM_Smokestack_Cluster_3.SM_Smokestack_Cluster_3"));
 	if (Cluster3Asset.Succeeded())
 	{
 		MeshCluster3 = Cluster3Asset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> HeavyAsset(TEXT("/Game/Game/Meshes/SM_Smokestack_Heavy/StaticMeshes/SM_Smokestack_Heavy.SM_Smokestack_Heavy"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> HeavyAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Heavy/StaticMeshes/SM_Smokestack_Heavy.SM_Smokestack_Heavy"));
 	if (HeavyAsset.Succeeded())
 	{
 		MeshHeavy = HeavyAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealSingleAsset(TEXT("/Game/Game/Meshes/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealSingleAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
 	if (SealSingleAsset.Succeeded())
 	{
 		SealMeshSingle = SealSingleAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealClusterAsset(TEXT("/Game/Game/Meshes/SM_Seal_Cluster/StaticMeshes/SM_Seal_Cluster.SM_Seal_Cluster"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealClusterAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Cluster/StaticMeshes/SM_Seal_Cluster.SM_Seal_Cluster"));
 	if (SealClusterAsset.Succeeded())
 	{
 		SealMeshCluster = SealClusterAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealHeavyAsset(TEXT("/Game/Game/Meshes/SM_Seal_Heavy/StaticMeshes/SM_Seal_Heavy.SM_Seal_Heavy"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealHeavyAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Heavy/StaticMeshes/SM_Seal_Heavy.SM_Seal_Heavy"));
 	if (SealHeavyAsset.Succeeded())
 	{
 		SealMeshHeavy = SealHeavyAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> ToxicSmogAsset(TEXT("/Game/Game/VFX/NS_ToxicSmog.NS_ToxicSmog"));
+	if (ToxicSmogAsset.Succeeded())
+	{
+		ToxicSmogSystem = ToxicSmogAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CleanSteamAsset(TEXT("/Game/Game/VFX/NS_CleanSteam.NS_CleanSteam"));
+	if (CleanSteamAsset.Succeeded())
+	{
+		CleanSteamSystem = CleanSteamAsset.Object;
+	}
+
+	if (ToxicSmogSystem)
+	{
+		ToxicSmogVFX->SetAsset(ToxicSmogSystem);
+		ToxicSmogVFX_2->SetAsset(ToxicSmogSystem);
+		ToxicSmogVFX_3->SetAsset(ToxicSmogSystem);
+	}
+
+	if (CleanSteamSystem)
+	{
+		CleanSteamVFX->SetAsset(CleanSteamSystem);
+		CleanSteamVFX_2->SetAsset(CleanSteamSystem);
+		CleanSteamVFX_3->SetAsset(CleanSteamSystem);
 	}
 
 	if (MeshSingle)
@@ -359,12 +386,33 @@ float ASmokestack::GetWakeDownwashSpeed_Implementation(const UPrimitiveComponent
 
 void ASmokestack::RefreshArchetypeCollisionState()
 {
-	// Exact mouth heights & offsets from dimensions.json:
-	// Assembly_Single: 1 mouth at (0, 0, 1280)
-	// Assembly_Cluster_2: 2 mouths at (-340, 0, 1320) and (340, 0, 1320)
-	// Assembly_Cluster_3: 3 mouths at (-680, 0, 1320), (0, 0, 1320), and (680, 0, 1320)
-	// Assembly_Heavy: 1 mouth at (0, 0, 1480)
-	float MouthHeightZ = 1280.0f;
+	// Ensure Rev3 assets are resolved if null or pointing to obsolete cache
+	auto ResolveRev3Mesh = [](TObjectPtr<UStaticMesh>& MeshPtr, const TCHAR* Path)
+	{
+		if (!MeshPtr || !MeshPtr->GetPathName().Contains(TEXT("Rev3")))
+		{
+			if (UStaticMesh* Loaded = LoadObject<UStaticMesh>(nullptr, Path))
+			{
+				MeshPtr = Loaded;
+			}
+		}
+	};
+
+	ResolveRev3Mesh(MeshSingle, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Single/StaticMeshes/SM_Smokestack_Single.SM_Smokestack_Single"));
+	ResolveRev3Mesh(MeshCluster, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster/StaticMeshes/SM_Smokestack_Cluster.SM_Smokestack_Cluster"));
+	ResolveRev3Mesh(MeshCluster2, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_2/StaticMeshes/SM_Smokestack_Cluster_2.SM_Smokestack_Cluster_2"));
+	ResolveRev3Mesh(MeshCluster3, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_3/StaticMeshes/SM_Smokestack_Cluster_3.SM_Smokestack_Cluster_3"));
+	ResolveRev3Mesh(MeshHeavy, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Heavy/StaticMeshes/SM_Smokestack_Heavy.SM_Smokestack_Heavy"));
+	ResolveRev3Mesh(SealMeshSingle, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
+	ResolveRev3Mesh(SealMeshCluster, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Cluster/StaticMeshes/SM_Seal_Cluster.SM_Seal_Cluster"));
+	ResolveRev3Mesh(SealMeshHeavy, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Heavy/StaticMeshes/SM_Seal_Heavy.SM_Seal_Heavy"));
+
+	// Exact mouth heights & offsets from dimensions.json (Revision 3):
+	// Assembly_Single: 1 mouth at (0, 0, 1200)
+	// Assembly_Cluster_2: 2 mouths at (-340, 0, 600) and (340, 0, 600)
+	// Assembly_Cluster_3: 3 mouths in equilateral triangle at (-340, 196.3, 600), (340, 196.3, 600), and (0, -392.6, 600)
+	// Assembly_Heavy: 1 mouth at (0, 0, 1400)
+	float MouthHeightZ = 1200.0f;
 	float ShaftRadius = 275.0f;
 	int32 ActiveMouths = 1;
 	FVector MouthOffsets[3] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
@@ -374,7 +422,7 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	switch (SmokestackType)
 	{
 	case ESmokestackType::Normal:
-		MouthHeightZ = 1280.0f;
+		MouthHeightZ = 1200.0f;
 		ShaftRadius = 275.0f;
 		ActiveMouths = 1;
 		MouthOffsets[0] = FVector(0.0f, 0.0f, MouthHeightZ);
@@ -383,14 +431,14 @@ void ASmokestack::RefreshArchetypeCollisionState()
 		break;
 
 	case ESmokestackType::Clustered:
-		MouthHeightZ = 1320.0f;
+		MouthHeightZ = 600.0f;
 		ShaftRadius = 265.0f;
 		ActiveMouths = FMath::Clamp(ClusterStackCount, 2, 3);
 		if (ActiveMouths == 3)
 		{
-			MouthOffsets[0] = FVector(-680.0f, 0.0f, MouthHeightZ);
-			MouthOffsets[1] = FVector(0.0f, 0.0f, MouthHeightZ);
-			MouthOffsets[2] = FVector(680.0f, 0.0f, MouthHeightZ);
+			MouthOffsets[0] = FVector(-340.0f, 196.3f, MouthHeightZ);
+			MouthOffsets[1] = FVector(340.0f, 196.3f, MouthHeightZ);
+			MouthOffsets[2] = FVector(0.0f, -392.6f, MouthHeightZ);
 			DesiredBodyMesh = MeshCluster3 ? MeshCluster3 : MeshCluster;
 		}
 		else
@@ -403,7 +451,7 @@ void ASmokestack::RefreshArchetypeCollisionState()
 		break;
 
 	case ESmokestackType::HeavyLethal:
-		MouthHeightZ = 1480.0f;
+		MouthHeightZ = 1400.0f;
 		ShaftRadius = 315.0f;
 		ActiveMouths = 1;
 		MouthOffsets[0] = FVector(0.0f, 0.0f, MouthHeightZ);
@@ -420,6 +468,8 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	UCapsuleComponent* BodyCapsules[3] = { ChimneyBodyCollision, ChimneyBodyCollision_2, ChimneyBodyCollision_3 };
 	USphereComponent* RimSpheres[3] = { RimTargetSphere, RimTargetSphere_2, RimTargetSphere_3 };
 	UStaticMeshComponent* SealCaps[3] = { SealCapMesh, SealCapMesh_2, SealCapMesh_3 };
+	UNiagaraComponent* ToxicVFXs[3] = { ToxicSmogVFX, ToxicSmogVFX_2, ToxicSmogVFX_3 };
+	UNiagaraComponent* CleanVFXs[3] = { CleanSteamVFX, CleanSteamVFX_2, CleanSteamVFX_3 };
 
 	const float BodyHalfHeight = (MouthHeightZ - 80.0f) * 0.5f;
 
@@ -453,6 +503,50 @@ void ASmokestack::RefreshArchetypeCollisionState()
 				SealCaps[i]->SetStaticMesh(DesiredSealMesh);
 			}
 			SealCaps[i]->SetVisibility(bIsMouthActive && bIsThisMouthSealed);
+		}
+
+		if (ToxicVFXs[i])
+		{
+			if (ToxicSmogSystem && ToxicVFXs[i]->GetAsset() != ToxicSmogSystem)
+			{
+				ToxicVFXs[i]->SetAsset(ToxicSmogSystem);
+			}
+
+			if (bIsMouthActive && !bIsThisMouthSealed)
+			{
+				if (!ToxicVFXs[i]->IsActive())
+				{
+					ToxicVFXs[i]->Activate(true);
+				}
+				ToxicVFXs[i]->SetVisibility(true);
+			}
+			else
+			{
+				ToxicVFXs[i]->Deactivate();
+				ToxicVFXs[i]->SetVisibility(false);
+			}
+		}
+
+		if (CleanVFXs[i])
+		{
+			if (CleanSteamSystem && CleanVFXs[i]->GetAsset() != CleanSteamSystem)
+			{
+				CleanVFXs[i]->SetAsset(CleanSteamSystem);
+			}
+
+			if (bIsMouthActive && bIsThisMouthSealed)
+			{
+				if (!CleanVFXs[i]->IsActive())
+				{
+					CleanVFXs[i]->Activate(true);
+				}
+				CleanVFXs[i]->SetVisibility(true);
+			}
+			else
+			{
+				CleanVFXs[i]->Deactivate();
+				CleanVFXs[i]->SetVisibility(false);
+			}
 		}
 	}
 
