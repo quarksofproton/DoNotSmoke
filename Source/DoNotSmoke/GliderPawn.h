@@ -21,10 +21,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCarbonSealFiredSignature);
 
 /**
  * Kinematic Solar Glider Pawn featuring:
- * - Strict net-loss gliding (15:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
+ * - Strict net-loss gliding (25:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
  * - Decoupled SpringArm camera look & 135-degree cone clamped projectile aiming with ~10-degree magnetic assist
  * - Periodic 0.2s vertical sunlight LineTrace (binary 12.5%/s charge vs 0%/s under smog)
- * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 600u "PULL UP!" warning, 2600u Max Ceiling
+ * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 600u "PULL UP!" warning, 3900u Max Ceiling
  */
 UCLASS(Blueprintable)
 class DONOTSMOKE_API AGliderPawn : public APawn
@@ -84,12 +84,6 @@ public:
 	/** Applies external downward wake turbulence impulse (e.g., from passing VIP Private Jet). */
 	UFUNCTION(BlueprintCallable, Category = "Glider|Hazards")
 	void ApplyWakeTurbulence(float DownwashSpeed, float DurationSeconds);
-
-	UFUNCTION(BlueprintCallable, Category = "Glider|Debug")
-	void SetShowDebugHUD(bool bShow) { bShowDebugHUD = bShow; }
-
-	UFUNCTION(BlueprintPure, Category = "Glider|Debug")
-	bool GetShowDebugHUD() const { return bShowDebugHUD; }
 
 	/** Muzzle / projectile launch origin offset from glider nose. */
 	UFUNCTION(BlueprintPure, Category = "Glider|Combat")
@@ -254,10 +248,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Combat", meta = (AllowPrivateAccess = "true"))
 	float AimAssistMaxRange = 20000.0f;
 
-	/** Displays live C++ debug telemetry and 135-degree aim indicator on screen before UMG HUD is wired. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Glider|Debug", meta = (AllowPrivateAccess = "true"))
-	bool bShowDebugHUD = true;
-
 	// ==========================================
 	// INTERNAL RUNTIME STATE
 	// ==========================================
@@ -294,6 +284,9 @@ private:
 	bool bKeyRollRightHeld = false;
 
 	FTimerHandle SunlightTraceTimerHandle;
+
+	/** Smokestack actors cached once in BeginPlay (static level actors) for per-tick aim assist. */
+	TArray<TWeakObjectPtr<AActor>> CachedSealableActors;
 
 	void InputPitchUpPressed() { bKeyPitchUpHeld = true; RefreshKeyAxisInputs(); }
 	void InputPitchUpReleased() { bKeyPitchUpHeld = false; RefreshKeyAxisInputs(); }

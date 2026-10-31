@@ -8,6 +8,11 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	const TCHAR* const SealCapMeshPath = TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single");
+}
+
 ACarbonSealProjectile::ACarbonSealProjectile()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -25,7 +30,7 @@ ACarbonSealProjectile::ACarbonSealProjectile()
 	CapsuleMesh->SetRelativeScale3D(FVector(0.25f, 0.25f, 0.25f));
 	CapsuleMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealCapMeshAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealCapMeshAsset(SealCapMeshPath);
 	if (SealCapMeshAsset.Succeeded())
 	{
 		CapsuleMesh->SetStaticMesh(SealCapMeshAsset.Object);
@@ -47,7 +52,7 @@ void ACarbonSealProjectile::BeginPlay()
 
 	if (CapsuleMesh && (!CapsuleMesh->GetStaticMesh() || !CapsuleMesh->GetStaticMesh()->GetPathName().Contains(TEXT("Rev3"))))
 	{
-		if (UStaticMesh* Rev3Seal = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single")))
+		if (UStaticMesh* Rev3Seal = LoadObject<UStaticMesh>(nullptr, SealCapMeshPath))
 		{
 			CapsuleMesh->SetStaticMesh(Rev3Seal);
 		}
@@ -106,7 +111,7 @@ void ACarbonSealProjectile::Tick(float DeltaTime)
 
 		if (!DesiredDir.IsNearlyZero() && !CurrentDir.IsNearlyZero())
 		{
-			const FVector SteeredDir = FMath::VInterpNormalRotationTo(CurrentDir, DesiredDir, DeltaTime, MagneticSteerInterpSpeed * 15.0f);
+			const FVector SteeredDir = FMath::VInterpNormalRotationTo(CurrentDir, DesiredDir, DeltaTime, MagneticSteerInterpSpeed);
 			ProjectileMovement->Velocity = SteeredDir * ProjectileMovement->Velocity.Size();
 		}
 	}
@@ -120,6 +125,10 @@ void ACarbonSealProjectile::InitializeLaunch(const FVector& LaunchDirection, AAc
 	const FVector SafeDir = LaunchDirection.GetSafeNormal();
 	if (ProjectileMovement && !SafeDir.IsNearlyZero())
 	{
+		// Re-apply tuning here so Blueprint overrides of LaunchSpeed/ProjectileGravityScale take effect
+		ProjectileMovement->InitialSpeed = LaunchSpeed;
+		ProjectileMovement->MaxSpeed = LaunchSpeed;
+		ProjectileMovement->ProjectileGravityScale = ProjectileGravityScale;
 		ProjectileMovement->Velocity = SafeDir * LaunchSpeed;
 		ProjectileMovement->UpdateComponentVelocity();
 	}

@@ -22,6 +22,7 @@ enum class ESmokestackType : uint8
 	HeavyLethal UMETA(DisplayName = "Type C - Heavy Lethal Plume")
 };
 
+/** Fired once per chimney mouth sealed (a Clustered stack broadcasts 2-3 times; check IsSealed() for full seal). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSmokestackSealedSignature, ASmokestack*, SealedSmokestack);
 
 /**
@@ -78,7 +79,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	/** Blueprint cosmetic hook fired when the smokestack transitions from toxic smoke to clean steam. */
+	/** Blueprint cosmetic hook fired each time a chimney mouth transitions from toxic smoke to clean steam (once per mouth). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Smokestack|Cosmetics", meta = (DisplayName = "On Smokestack Sealed (Cosmetics)"))
 	void BP_OnSmokestackSealed();
 
@@ -127,7 +128,7 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCapsuleComponent> LethalPlumeCapsule;
 
-	/** Overhead smog canopy blocker at sky ceiling height that blocks upward sunlight LineTraces until this stack is sealed. */
+	/** Overhead smog canopy blocker at world Z CanopyWorldAltitude that blocks upward sunlight LineTraces until this stack is sealed. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USphereComponent> OverheadSmogCanopySphere;
 

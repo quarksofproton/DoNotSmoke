@@ -4,14 +4,13 @@
 #include "GliderPawn.h"
 #include "PrivateJet.h"
 #include "Smokestack.h"
-#include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
-#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Components/Button.h"
@@ -62,6 +61,21 @@ namespace DoNotSmokeUI
 		Text->SetColorAndOpacity(FSlateColor(Color));
 		Text->SetVisibility(ESlateVisibility::HitTestInvisible);
 		return Text;
+	}
+
+	/** Builds a run of star glyphs, optionally separated (e.g. TEXT(" ") for "★ ★ ★"). */
+	static FString MakeStarString(int32 Count, const TCHAR* Separator = TEXT(""))
+	{
+		FString Stars;
+		for (int32 s = 0; s < Count; ++s)
+		{
+			if (s > 0)
+			{
+				Stars += Separator;
+			}
+			Stars += TEXT("★");
+		}
+		return Stars;
 	}
 
 	/** Auto-sized and centred on Position so text stays vertically centred on its panel art. */
@@ -242,6 +256,8 @@ float UDoNotSmokeFlightHUDWidget::AltitudeToRulerV(float Altitude)
 {
 	// Ruler texture rows (normalized V) for each altitude band boundary:
 	// dark smog bed 0-400u, red pull-up band 400-600u, orange chimney band 600-1400u, green open sky 1400-3900u
+	// These mirror the glider's KillFloor / SmogBed / PullUp / chimney band / GliderMaxCeilingAltitude values and are tied
+	// to the ruler art, so they must be updated together with those properties.
 	static const float Altitudes[] = { 0.0f, 400.0f, 600.0f, 1400.0f, 3900.0f };
 	static const float RulerV[] = { 0.923f, 0.812f, 0.754f, 0.515f, 0.166f };
 
@@ -262,6 +278,8 @@ float UDoNotSmokeFlightHUDWidget::AltitudeToRulerV(float Altitude)
 
 void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
+	using namespace DoNotSmokeUI;
+
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
 	BlinkTime += InDeltaTime;
@@ -303,8 +321,7 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 	{
 		if (StacksAndCO2Text)
 		{
-			FString Stars;
-			for (int32 s = 0; s < GM->CalculateStarRating(); ++s) { Stars += TEXT("★"); }
+			const FString Stars = MakeStarString(GM->CalculateStarRating());
 
 			const FString Msg = FString::Printf(
 				TEXT("STACKS %d/%d   CO2 %.0f / %.0f kg   SUN %.0f%%   %s"),
@@ -314,7 +331,11 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 				GM->GetTargetMinCarbonKg(),
 				GM->GetSunPocketOpenRatio() * 100.0f,
 				*Stars);
-			StacksAndCO2Text->SetText(FText::FromString(Msg));
+			if (Msg != LastStatusText)
+			{
+				LastStatusText = Msg;
+				StacksAndCO2Text->SetText(FText::FromString(Msg));
+			}
 		}
 
 		const bool bJet = GM->IsPrivateJetAlertActive();
@@ -580,6 +601,12 @@ void UDoNotSmokeCrashWidget::HandleRestartClicked()
 // UDoNotSmokeSummaryWidget Implementation
 // ==========================================
 
+UDoNotSmokeSummaryWidget::UDoNotSmokeSummaryWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	SetIsFocusable(true);
+}
+
 void UDoNotSmokeSummaryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
@@ -594,6 +621,8 @@ TSharedRef<SWidget> UDoNotSmokeSummaryWidget::RebuildWidget()
 
 void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 {
+	using namespace DoNotSmokeUI;
+
 	if (bBuiltFallbackTree)
 	{
 		return;
@@ -615,9 +644,7 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 
 	if (!SummaryDetailsText)
 	{
-		SummaryDetailsText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SummaryDetailsText"));
-		SummaryDetailsText->SetJustification(ETextJustify::Center);
-		SummaryDetailsText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f)));
+		SummaryDetailsText = MakeText(WidgetTree, TEXT("SummaryDetailsText"), 22, FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
 		if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(SummaryDetailsText))
 		{
 			Slot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
@@ -629,17 +656,31 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	bBuiltFallbackTree = true;
 }
 
+FReply UDoNotSmokeSummaryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	const FKey Key = InKeyEvent.GetKey();
+	if (Key == EKeys::R || Key == EKeys::Enter || Key == EKeys::SpaceBar)
+	{
+		if (ADoNotSmokeGameMode* GM = Cast<ADoNotSmokeGameMode>(UGameplayStatics::GetGameMode(this)))
+		{
+			GM->TriggerInstantRestart();
+		}
+		return FReply::Handled();
+	}
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
 void UDoNotSmokeSummaryWidget::SetupSummaryData(int32 InStars, float InCarbonKg, float InTimeSeconds, float InAccuracyPercent, const FText& InHeadline)
 {
+	using namespace DoNotSmokeUI;
+
 	if (HeadlineText)
 	{
 		HeadlineText->SetText(InHeadline);
 	}
 	if (StarsText)
 	{
-		FString StarStr = TEXT("RATING: ");
-		for (int32 s = 0; s < InStars; ++s) { StarStr += TEXT("★ "); }
-		StarsText->SetText(FText::FromString(StarStr));
+		StarsText->SetText(FText::FromString(TEXT("RATING: ") + MakeStarString(InStars, TEXT(" "))));
 	}
 	if (CarbonText)
 	{
@@ -655,8 +696,7 @@ void UDoNotSmokeSummaryWidget::SetupSummaryData(int32 InStars, float InCarbonKg,
 	}
 	if (SummaryDetailsText)
 	{
-		FString StarStr;
-		for (int32 s = 0; s < InStars; ++s) { StarStr += TEXT("★ "); }
+		const FString StarStr = MakeStarString(InStars, TEXT(" "));
 
 		const FString Details = FString::Printf(
 			TEXT("====================================================\n"
@@ -669,7 +709,8 @@ void UDoNotSmokeSummaryWidget::SetupSummaryData(int32 InStars, float InCarbonKg,
 			     "CARBON SEAL ACCURACY: %.0f%%\n\n"
 			     "====================================================\n"
 			     "[ Sector Cleared - Smokestacks Permanently Sealed ]\n"
-			     "===================================================="),
+			     "====================================================\n\n"
+			     "[R] RESTART"),
 			*InHeadline.ToString(),
 			*StarStr,
 			InStars,
@@ -690,26 +731,8 @@ ADoNotSmokeGameMode::ADoNotSmokeGameMode()
 	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = AGliderPawn::StaticClass();
 
-	static ConstructorHelpers::FClassFinder<UDoNotSmokeFlightHUDWidget> HUDWidgetFinder(TEXT("/Game/Game/UI/WBP_FlightHUD.WBP_FlightHUD_C"));
-	if (HUDWidgetFinder.Succeeded())
-	{
-		FlightHUDWidgetClass = HUDWidgetFinder.Class;
-	}
-	else
-	{
-		FlightHUDWidgetClass = UDoNotSmokeFlightHUDWidget::StaticClass();
-	}
-
-	static ConstructorHelpers::FClassFinder<UDoNotSmokeSummaryWidget> SummaryWidgetFinder(TEXT("/Game/Game/UI/WBP_COP31_Summary.WBP_COP31_Summary_C"));
-	if (SummaryWidgetFinder.Succeeded())
-	{
-		SummaryWidgetClass = SummaryWidgetFinder.Class;
-	}
-	else
-	{
-		SummaryWidgetClass = UDoNotSmokeSummaryWidget::StaticClass();
-	}
-
+	FlightHUDWidgetClass = UDoNotSmokeFlightHUDWidget::StaticClass();
+	SummaryWidgetClass = UDoNotSmokeSummaryWidget::StaticClass();
 	CrashWidgetClass = UDoNotSmokeCrashWidget::StaticClass();
 }
 
@@ -737,32 +760,22 @@ void ADoNotSmokeGameMode::BeginPlay()
 
 	// Register all Smokestacks in the active level
 	TrackedSmokestacks.Empty();
-	TArray<AActor*> FoundStacks;
-	UGameplayStatics::GetAllActorsOfClass(World, ASmokestack::StaticClass(), FoundStacks);
-
-	for (AActor* Actor : FoundStacks)
+	for (TActorIterator<ASmokestack> It(World); It; ++It)
 	{
-		if (ASmokestack* Stack = Cast<ASmokestack>(Actor))
+		ASmokestack* Stack = *It;
+		TrackedSmokestacks.Add(Stack);
+		TotalSmokestackCount += Stack->GetActiveMouthCount();
+		if (!Stack->IsSealed())
 		{
-			TrackedSmokestacks.Add(Stack);
-			TotalSmokestackCount += Stack->GetActiveMouthCount();
-			if (!Stack->IsSealed())
-			{
-				OpenSmokestackCount += Stack->GetUnsealedMouthCount();
-				Stack->OnSmokestackSealed.AddDynamic(this, &ADoNotSmokeGameMode::HandleSmokestackSealed);
-			}
+			OpenSmokestackCount += Stack->GetUnsealedMouthCount();
+			Stack->OnSmokestackSealed.AddDynamic(this, &ADoNotSmokeGameMode::HandleSmokestackSealed);
 		}
 	}
 
 	// Register all Private Jets in the active level
-	TArray<AActor*> FoundJets;
-	UGameplayStatics::GetAllActorsOfClass(World, APrivateJet::StaticClass(), FoundJets);
-	for (AActor* Actor : FoundJets)
+	for (TActorIterator<APrivateJet> It(World); It; ++It)
 	{
-		if (APrivateJet* Jet = Cast<APrivateJet>(Actor))
-		{
-			Jet->OnJetApproachStateChanged.AddDynamic(this, &ADoNotSmokeGameMode::HandlePrivateJetApproachChanged);
-		}
+		It->OnJetApproachStateChanged.AddDynamic(this, &ADoNotSmokeGameMode::HandlePrivateJetApproachChanged);
 	}
 
 	// Bind to player GliderPawn events for shot accounting and Crash restart
@@ -787,11 +800,6 @@ void ADoNotSmokeGameMode::BeginPlay()
 		if (FlightHUDWidget)
 		{
 			FlightHUDWidget->AddToViewport(10);
-			bShowDebugHUD = false;
-			if (AGliderPawn* Glider = Cast<AGliderPawn>(PC->GetPawn()))
-			{
-				Glider->SetShowDebugHUD(false);
-			}
 		}
 	}
 }
@@ -824,21 +832,6 @@ void ADoNotSmokeGameMode::Tick(float DeltaTime)
 			}
 		}
 	}
-
-	if (bShowDebugHUD && GEngine)
-	{
-		const FString SectorStatus = FString::Printf(
-			TEXT("[COP31 AUDIT] Open Stacks: %d / %d | CO2 Emitted: %.1f kg (C_min: %.0f kg) | Sun Pockets: %.0f%% | Stars: %d* %s"),
-			OpenSmokestackCount,
-			TotalSmokestackCount,
-			CumulativeCarbonKg,
-			TargetMinCarbonKg,
-			SunPocketOpenRatio * 100.0f,
-			CalculateStarRating(),
-			bIsPrivateJetAlertActive ? *FString::Printf(TEXT(" | [!] VIP JET APPROACHING: \"%s\""), *ActiveJetBannerSlogan.ToString()) : TEXT(""));
-
-		GEngine->AddOnScreenDebugMessage(102, 0.0f, bIsPrivateJetAlertActive ? FColor::Red : FColor::Yellow, SectorStatus);
-	}
 }
 
 float ADoNotSmokeGameMode::GetShotAccuracyPercent() const
@@ -852,11 +845,11 @@ float ADoNotSmokeGameMode::GetShotAccuracyPercent() const
 
 int32 ADoNotSmokeGameMode::CalculateStarRating() const
 {
-	if (CumulativeCarbonKg <= TargetMinCarbonKg * 1.25f)
+	if (CumulativeCarbonKg <= TargetMinCarbonKg * ThreeStarCarbonMultiplier)
 	{
 		return 3;
 	}
-	if (CumulativeCarbonKg <= TargetMinCarbonKg * 1.75f)
+	if (CumulativeCarbonKg <= TargetMinCarbonKg * TwoStarCarbonMultiplier)
 	{
 		return 2;
 	}
@@ -898,7 +891,7 @@ void ADoNotSmokeGameMode::TriggerInstantRestart()
 
 void ADoNotSmokeGameMode::HandleSmokestackSealed(ASmokestack* SealedStack)
 {
-	if (bIsLevelCompleted)
+	if (bIsLevelCompleted || bHasGliderCrashed)
 	{
 		return;
 	}
@@ -927,19 +920,18 @@ void ADoNotSmokeGameMode::HandleSmokestackSealed(ASmokestack* SealedStack)
 			{
 				SummaryWidget->SetupSummaryData(FinalStars, CumulativeCarbonKg, ElapsedLevelSeconds, FinalAccuracy, FinalHeadline);
 				SummaryWidget->AddToViewport(20);
-			}
-		}
 
-		if (bShowDebugHUD && GEngine)
-		{
-			const FString SummaryMsg = FString::Printf(
-				TEXT("=== SECTOR CLEARED (%d STARS) ===\n%s\nFinal CO2: %.1f kg | Time: %.1fs | Accuracy: %.0f%%"),
-				FinalStars,
-				*FinalHeadline.ToString(),
-				CumulativeCarbonKg,
-				ElapsedLevelSeconds,
-				FinalAccuracy);
-			GEngine->AddOnScreenDebugMessage(103, 15.0f, FColor::Green, SummaryMsg);
+				if (FlightHUDWidget)
+				{
+					FlightHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+				}
+
+				FInputModeUIOnly InputMode;
+				InputMode.SetWidgetToFocus(SummaryWidget->TakeWidget());
+				InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+				PC->SetInputMode(InputMode);
+				PC->SetShowMouseCursor(true);
+			}
 		}
 
 		OnLevelCompleted.Broadcast(FinalStars, CumulativeCarbonKg, ElapsedLevelSeconds, FinalAccuracy);

@@ -26,7 +26,7 @@ public:
 
 	/**
 	 * Initializes launch velocity and optional magnetic homing target acquired within the ~10 deg assist cone.
-	 * @param LaunchDirection Normalized world launch direction (already clamped to 45 deg glider forward cone).
+	 * @param LaunchDirection Normalized world launch direction (already clamped to the glider's aim cone).
 	 * @param HomingTargetActor Optional actor implementing IBPI_SealableTarget.
 	 * @param HomingRimLocation Exact world-space location of the locked chimney mouth.
 	 */
@@ -62,9 +62,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|Config", meta = (AllowPrivateAccess = "true"))
 	float ProjectileGravityScale = 0.25f;
 
-	/** Angular homing interpolation speed (deg/sec) steering the projectile gently toward the locked rim. */
+	/** Homing turn rate (deg/sec) passed directly to VInterpNormalRotationTo, steering the projectile gently toward the locked rim. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|Config", meta = (AllowPrivateAccess = "true"))
-	float MagneticSteerInterpSpeed = 6.0f;
+	float MagneticSteerInterpSpeed = 90.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|Config", meta = (AllowPrivateAccess = "true"))
 	float MaxLifeSeconds = 4.0f;

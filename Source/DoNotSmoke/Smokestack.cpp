@@ -10,6 +10,19 @@
 #include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
 
+// Rev3 mesh asset paths, shared by the constructor loaders and ResolveRev3Mesh
+namespace
+{
+	const TCHAR* const MeshSinglePath = TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Single/StaticMeshes/SM_Smokestack_Single.SM_Smokestack_Single");
+	const TCHAR* const MeshClusterPath = TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster/StaticMeshes/SM_Smokestack_Cluster.SM_Smokestack_Cluster");
+	const TCHAR* const MeshCluster2Path = TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_2/StaticMeshes/SM_Smokestack_Cluster_2.SM_Smokestack_Cluster_2");
+	const TCHAR* const MeshCluster3Path = TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_3/StaticMeshes/SM_Smokestack_Cluster_3.SM_Smokestack_Cluster_3");
+	const TCHAR* const MeshHeavyPath = TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Heavy/StaticMeshes/SM_Smokestack_Heavy.SM_Smokestack_Heavy");
+	const TCHAR* const SealMeshSinglePath = TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single");
+	const TCHAR* const SealMeshClusterPath = TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Cluster/StaticMeshes/SM_Seal_Cluster.SM_Seal_Cluster");
+	const TCHAR* const SealMeshHeavyPath = TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Heavy/StaticMeshes/SM_Seal_Heavy.SM_Seal_Heavy");
+}
+
 ASmokestack::ASmokestack()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -45,7 +58,7 @@ ASmokestack::ASmokestack()
 		Comp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		Comp->SetCollisionResponseToAllChannels(ECR_Overlap);
 		Comp->SetGenerateOverlapEvents(true);
-		Comp->SetHiddenInGame(false);
+		Comp->SetHiddenInGame(true);
 		Comp->ShapeColor = FColor::Green;
 		return Comp;
 	};
@@ -73,12 +86,12 @@ ASmokestack::ASmokestack()
 	LethalPlumeCapsule->InitCapsuleSize(LethalPlumeRadius, LethalPlumeHalfHeight);
 	LethalPlumeCapsule->SetCollisionResponseToAllChannels(ECR_Overlap);
 	LethalPlumeCapsule->SetGenerateOverlapEvents(true);
-	LethalPlumeCapsule->SetHiddenInGame(false);
+	LethalPlumeCapsule->SetHiddenInGame(true);
 	LethalPlumeCapsule->ShapeColor = FColor::Red;
 
 	OverheadSmogCanopySphere = CreateDefaultSubobject<USphereComponent>(TEXT("OverheadSmogCanopySphere"));
 	OverheadSmogCanopySphere->SetupAttachment(SceneRoot);
-	OverheadSmogCanopySphere->SetRelativeLocation(FVector(0.0f, 0.0f, CanopyWorldAltitude));
+	OverheadSmogCanopySphere->SetWorldLocation(FVector(0.0f, 0.0f, CanopyWorldAltitude));
 	OverheadSmogCanopySphere->InitSphereRadius(CanopyMinRadius);
 	OverheadSmogCanopySphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	OverheadSmogCanopySphere->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -101,49 +114,49 @@ ASmokestack::ASmokestack()
 	CleanSteamVFX_3 = InitVFX(TEXT("CleanSteamVFX_3"), RimTargetSphere_3, false);
 
 	// Load imported Do Not Smoke modular chimney & seal cap meshes (Revision 3)
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SingleAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Single/StaticMeshes/SM_Smokestack_Single.SM_Smokestack_Single"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SingleAsset(MeshSinglePath);
 	if (SingleAsset.Succeeded())
 	{
 		MeshSingle = SingleAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> ClusterAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster/StaticMeshes/SM_Smokestack_Cluster.SM_Smokestack_Cluster"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> ClusterAsset(MeshClusterPath);
 	if (ClusterAsset.Succeeded())
 	{
 		MeshCluster = ClusterAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster2Asset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_2/StaticMeshes/SM_Smokestack_Cluster_2.SM_Smokestack_Cluster_2"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster2Asset(MeshCluster2Path);
 	if (Cluster2Asset.Succeeded())
 	{
 		MeshCluster2 = Cluster2Asset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster3Asset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_3/StaticMeshes/SM_Smokestack_Cluster_3.SM_Smokestack_Cluster_3"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cluster3Asset(MeshCluster3Path);
 	if (Cluster3Asset.Succeeded())
 	{
 		MeshCluster3 = Cluster3Asset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> HeavyAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Heavy/StaticMeshes/SM_Smokestack_Heavy.SM_Smokestack_Heavy"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> HeavyAsset(MeshHeavyPath);
 	if (HeavyAsset.Succeeded())
 	{
 		MeshHeavy = HeavyAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealSingleAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealSingleAsset(SealMeshSinglePath);
 	if (SealSingleAsset.Succeeded())
 	{
 		SealMeshSingle = SealSingleAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealClusterAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Cluster/StaticMeshes/SM_Seal_Cluster.SM_Seal_Cluster"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealClusterAsset(SealMeshClusterPath);
 	if (SealClusterAsset.Succeeded())
 	{
 		SealMeshCluster = SealClusterAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealHeavyAsset(TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Heavy/StaticMeshes/SM_Seal_Heavy.SM_Seal_Heavy"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealHeavyAsset(SealMeshHeavyPath);
 	if (SealHeavyAsset.Succeeded())
 	{
 		SealMeshHeavy = SealHeavyAsset.Object;
@@ -193,8 +206,8 @@ void ASmokestack::OnConstruction(const FTransform& Transform)
 
 	if (OverheadSmogCanopySphere)
 	{
-		const float LocalCanopyZ = CanopyWorldAltitude - GetActorLocation().Z;
-		OverheadSmogCanopySphere->SetRelativeLocation(FVector(0.0f, 0.0f, FMath::Max(1600.0f, LocalCanopyZ)));
+		const FVector ActorLoc = GetActorLocation();
+		OverheadSmogCanopySphere->SetWorldLocation(FVector(ActorLoc.X, ActorLoc.Y, CanopyWorldAltitude));
 		OverheadSmogCanopySphere->SetSphereRadius(CanopyMinRadius);
 	}
 
@@ -398,14 +411,14 @@ void ASmokestack::RefreshArchetypeCollisionState()
 		}
 	};
 
-	ResolveRev3Mesh(MeshSingle, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Single/StaticMeshes/SM_Smokestack_Single.SM_Smokestack_Single"));
-	ResolveRev3Mesh(MeshCluster, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster/StaticMeshes/SM_Smokestack_Cluster.SM_Smokestack_Cluster"));
-	ResolveRev3Mesh(MeshCluster2, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_2/StaticMeshes/SM_Smokestack_Cluster_2.SM_Smokestack_Cluster_2"));
-	ResolveRev3Mesh(MeshCluster3, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_3/StaticMeshes/SM_Smokestack_Cluster_3.SM_Smokestack_Cluster_3"));
-	ResolveRev3Mesh(MeshHeavy, TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Heavy/StaticMeshes/SM_Smokestack_Heavy.SM_Smokestack_Heavy"));
-	ResolveRev3Mesh(SealMeshSingle, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single"));
-	ResolveRev3Mesh(SealMeshCluster, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Cluster/StaticMeshes/SM_Seal_Cluster.SM_Seal_Cluster"));
-	ResolveRev3Mesh(SealMeshHeavy, TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Heavy/StaticMeshes/SM_Seal_Heavy.SM_Seal_Heavy"));
+	ResolveRev3Mesh(MeshSingle, MeshSinglePath);
+	ResolveRev3Mesh(MeshCluster, MeshClusterPath);
+	ResolveRev3Mesh(MeshCluster2, MeshCluster2Path);
+	ResolveRev3Mesh(MeshCluster3, MeshCluster3Path);
+	ResolveRev3Mesh(MeshHeavy, MeshHeavyPath);
+	ResolveRev3Mesh(SealMeshSingle, SealMeshSinglePath);
+	ResolveRev3Mesh(SealMeshCluster, SealMeshClusterPath);
+	ResolveRev3Mesh(SealMeshHeavy, SealMeshHeavyPath);
 
 	// Exact mouth heights & offsets from dimensions.json (Revision 3):
 	// Assembly_Single: 1 mouth at (0, 0, 1200)
@@ -433,7 +446,7 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	case ESmokestackType::Clustered:
 		MouthHeightZ = 600.0f;
 		ShaftRadius = 265.0f;
-		ActiveMouths = FMath::Clamp(ClusterStackCount, 2, 3);
+		ActiveMouths = GetActiveMouthCount();
 		if (ActiveMouths == 3)
 		{
 			MouthOffsets[0] = FVector(-340.0f, 196.3f, MouthHeightZ);

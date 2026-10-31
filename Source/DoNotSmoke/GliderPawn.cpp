@@ -2,14 +2,11 @@
 
 #include "GliderPawn.h"
 #include "CarbonSealProjectile.h"
-#include "GameplayInterfaces.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "DrawDebugHelpers.h"
-#include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -18,6 +15,11 @@
 #include "NiagaraComponent.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+	const TCHAR* const SolarGliderMeshPath = TEXT("/Game/Game/Meshes/SM_SolarGlider_V2/SM_SolarGlider/StaticMeshes/SM_SolarGlider.SM_SolarGlider");
+}
 
 AGliderPawn::AGliderPawn()
 {
@@ -41,7 +43,7 @@ AGliderPawn::AGliderPawn()
 	GreyboxGliderMesh->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.42f));
 	GreyboxGliderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SolarGliderMeshAsset(TEXT("/Game/Game/Meshes/SM_SolarGlider_V2/SM_SolarGlider/StaticMeshes/SM_SolarGlider.SM_SolarGlider"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SolarGliderMeshAsset(SolarGliderMeshPath);
 	if (SolarGliderMeshAsset.Succeeded())
 	{
 		GreyboxGliderMesh->SetStaticMesh(SolarGliderMeshAsset.Object);
@@ -77,7 +79,7 @@ void AGliderPawn::BeginPlay()
 
 	if (GreyboxGliderMesh)
 	{
-		UStaticMesh* V2Glider = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Game/Meshes/SM_SolarGlider_V2/SM_SolarGlider/StaticMeshes/SM_SolarGlider.SM_SolarGlider"));
+		UStaticMesh* V2Glider = LoadObject<UStaticMesh>(nullptr, SolarGliderMeshPath);
 		if (V2Glider)
 		{
 			GreyboxGliderMesh->SetStaticMesh(V2Glider);
@@ -115,6 +117,15 @@ void AGliderPawn::BeginPlay()
 
 	if (UWorld* World = GetWorld())
 	{
+		// Smokestacks are static level actors, so the sealable list is gathered once instead of every tick
+		TArray<AActor*> SealableActors;
+		UGameplayStatics::GetAllActorsWithInterface(World, UBPI_SealableTarget::StaticClass(), SealableActors);
+		CachedSealableActors.Reset();
+		for (AActor* SealableActor : SealableActors)
+		{
+			CachedSealableActors.Add(SealableActor);
+		}
+
 		World->GetTimerManager().SetTimer(
 			SunlightTraceTimerHandle,
 			this,
@@ -179,34 +190,7 @@ void AGliderPawn::Tick(float DeltaTime)
 	// bIsAimClampedToCone, and bHasMagneticRimLock are kept live for UMG HUD & targeting
 	AActor* LockedTarget = nullptr;
 	FVector LockedRimPos = FVector::ZeroVector;
-	const FVector ClampedAimDir = ComputeClampedAimDirection(LockedTarget, LockedRimPos);
-
-	if (bShowDebugHUD && GEngine)
-	{
-		if (UWorld* World = GetWorld())
-		{
-			const FVector AimReticleWorldPos = GetProjectileSpawnLocation() + ClampedAimDir * 1200.0f;
-			const FColor ReticleColor = (SealCooldownRemaining > 0.0f) ? FColor::Red : (LockedTarget ? FColor::Green : FColor::Cyan);
-			DrawDebugSphere(World, AimReticleWorldPos, 28.0f, 12, ReticleColor, false, -1.0f, 0, 3.0f);
-
-			if (LockedTarget && !LockedRimPos.IsNearlyZero())
-			{
-				DrawDebugSphere(World, LockedRimPos, 90.0f, 12, FColor::Green, false, -1.0f, 0, 4.0f);
-			}
-		}
-
-		const FString TelemetryLine = FString::Printf(
-			TEXT("[SOLAR GLIDER] Alt: %.0fu (MaxGlide: %.0fu) | Speed: %.0f u/s | Battery: %.0f%% [%s] | Seal CD: %.1fs %s"),
-			GetCurrentAltitude(),
-			MaxAllowedGlideZ,
-			CurrentSpeed,
-			SolarCharge,
-			bIsInSunlight ? TEXT("SUNLIGHT +12.5%/s") : TEXT("SMOG 0%/s"),
-			SealCooldownRemaining,
-			bIsPullUpWarningActive ? TEXT(" | >>> PULL UP! (<600u) <<<") : TEXT(""));
-
-		GEngine->AddOnScreenDebugMessage(101, 0.0f, bIsPullUpWarningActive ? FColor::Red : FColor::Cyan, TelemetryLine);
-	}
+	ComputeClampedAimDirection(LockedTarget, LockedRimPos);
 }
 
 float AGliderPawn::GetSealCooldownNormalized() const
@@ -404,6 +388,8 @@ void AGliderPawn::UpdateFlightKinematics(float DeltaTime)
 
 	FHitResult MoveHit;
 	SetActorLocation(NewLocation, true, &MoveHit);
+	// The sweep's blocking hit is handled explicitly here as well as via OnComponentHit, since a swept
+	// SetActorLocation does not reliably dispatch hit events; bHasCrashed makes a double call harmless
 	if (MoveHit.bBlockingHit)
 	{
 		HandleGliderHit(GliderCollisionSphere, MoveHit.GetActor(), MoveHit.GetComponent(), FVector::ZeroVector, MoveHit);
@@ -429,13 +415,7 @@ void AGliderPawn::UpdateSolarEnergyAndAltitudeChecks(float DeltaTime)
 		OnPullUpWarningChanged.Broadcast(bIsPullUpWarningActive);
 	}
 
-	// 3. Smog Bed (400u) blocks sunlight immediately
-	if (CurrentZ < SmogBedCeilingAltitude)
-	{
-		bIsInSunlight = false;
-	}
-
-	// 4. Solar Boost vs Binary Solar Charge (+12.5%/s in sunlight, 0%/s in smog)
+	// 3. Solar Boost vs Binary Solar Charge (+12.5%/s in sunlight, 0%/s in smog)
 	const bool bWasBoosting = bIsSolarBoosting;
 	if (bIsSolarBoostInputHeld && SolarCharge > 0.0f)
 	{
@@ -534,17 +514,15 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 	const float MinAssistCos = FMath::Cos(FMath::DegreesToRadians(AimAssistConeHalfAngleDeg));
 	float BestDot = MinAssistCos;
 
-	// Track depth along camera ray for convergence (defaulting to 3000u, clamped 800u .. 5000u)
+	// Track depth along camera ray for convergence (defaulting to 3000u, clamped 800u .. AimAssistMaxRange)
 	float ClosestDepthAlongCamRay = 3000.0f;
 	float BestAlignForDepth = 0.5f;
 
 	if (UWorld* World = GetWorld())
 	{
-		TArray<AActor*> SealableActors;
-		UGameplayStatics::GetAllActorsWithInterface(World, UBPI_SealableTarget::StaticClass(), SealableActors);
-
-		for (AActor* Candidate : SealableActors)
+		for (const TWeakObjectPtr<AActor>& CandidatePtr : CachedSealableActors)
 		{
+			AActor* Candidate = CandidatePtr.Get();
 			if (!Candidate || IBPI_SealableTarget::Execute_IsTargetSealed(Candidate))
 			{
 				continue;
@@ -574,7 +552,7 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 				const FVector DirFromCam = ToRimCam.GetSafeNormal();
 				const FVector DirFromSpawn = (RimLoc - SpawnLoc).GetSafeNormal();
 
-				// Verify that (RimLoc - SpawnLoc).GetSafeNormal() is within MaxAimConeHalfAngleDeg (135 deg) of GliderForward
+				// Verify that (RimLoc - SpawnLoc).GetSafeNormal() is within MaxAimConeHalfAngleDeg of GliderForward
 				if (FVector::DotProduct(GliderForward, DirFromSpawn) < MaxConeCos)
 				{
 					continue;
@@ -586,7 +564,7 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 				if (AimDot > BestAlignForDepth)
 				{
 					BestAlignForDepth = AimDot;
-					ClosestDepthAlongCamRay = FMath::Clamp(DepthAlongCam, 800.0f, 20000.0f);
+					ClosestDepthAlongCamRay = FMath::Clamp(DepthAlongCam, 800.0f, AimAssistMaxRange);
 				}
 
 				// Check magnetic lock within assist cone
@@ -595,21 +573,23 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 					BestDot = AimDot;
 					OutMagneticTarget = Candidate;
 					OutMagneticRimLocation = RimLoc;
-					ClosestDepthAlongCamRay = FMath::Clamp(DepthAlongCam, 800.0f, 20000.0f);
+					ClosestDepthAlongCamRay = FMath::Clamp(DepthAlongCam, 800.0f, AimAssistMaxRange);
 				}
 			}
 		}
 	}
 
-	FVector WorldTargetPoint = FVector::ZeroVector;
-	FVector DesiredAimDir = GliderForward;
+	FVector WorldTargetPoint;
+	FVector DesiredAimDir;
 	bool bClamped = false;
 
-	if (OutMagneticTarget != nullptr && !OutMagneticRimLocation.IsNearlyZero())
+	// Single source of truth: the lock flag is true only when the rim is actually used below
+	const bool bUseMagneticRim = (OutMagneticTarget != nullptr && !OutMagneticRimLocation.IsNearlyZero());
+
+	if (bUseMagneticRim)
 	{
 		WorldTargetPoint = OutMagneticRimLocation;
 		DesiredAimDir = (OutMagneticRimLocation - SpawnLoc).GetSafeNormal();
-		bClamped = false;
 	}
 	else
 	{
@@ -636,7 +616,7 @@ FVector AGliderPawn::ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVec
 
 	CachedAimWorldTarget = WorldTargetPoint;
 	bIsAimClampedToCone = bClamped;
-	bHasMagneticRimLock = (OutMagneticTarget != nullptr);
+	bHasMagneticRimLock = bUseMagneticRim;
 
 	return DesiredAimDir;
 }
@@ -650,6 +630,37 @@ void AGliderPawn::TriggerCrash(EGliderCrashCause Cause)
 
 	bHasCrashed = true;
 	LastCrashCause = Cause;
+
+	// Freeze all live gameplay state so nothing keeps updating HUD/VFX after the crash
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SunlightTraceTimerHandle);
+	}
+
+	if (bIsPullUpWarningActive)
+	{
+		bIsPullUpWarningActive = false;
+		OnPullUpWarningChanged.Broadcast(false);
+	}
+
+	const bool bWasBoosting = bIsSolarBoosting;
+	bIsSolarBoosting = false;
+	bIsSolarBoostInputHeld = false;
+	if (bWasBoosting)
+	{
+		if (SolarBoostVFX)
+		{
+			SolarBoostVFX->Deactivate();
+		}
+		BP_OnSolarBoostStateChanged(false);
+	}
+
+	bKeyPitchUpHeld = false;
+	bKeyPitchDownHeld = false;
+	bKeyRollLeftHeld = false;
+	bKeyRollRightHeld = false;
+	RefreshKeyAxisInputs();
+
 	OnGliderCrashed.Broadcast(this);
 }
 

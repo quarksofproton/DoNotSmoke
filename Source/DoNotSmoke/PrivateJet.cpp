@@ -48,15 +48,15 @@ APrivateJet::APrivateJet()
 	BannerTextRender->SetWorldSize(72.0f);
 	BannerTextRender->SetTextRenderColor(FColor::Yellow);
 
-	// Wake turbulence box extends from jet altitude (4200u) down to chimney top height (1400u -> -2800u span)
+	// Wake turbulence box spans from jet altitude (4200u) down to chimney top height (1400u) relative to the jet
 	WakeTurbulenceBox = CreateDefaultSubobject<UBoxComponent>(TEXT("WakeTurbulenceBox"));
 	WakeTurbulenceBox->SetupAttachment(MovingJetCarriage);
-	WakeTurbulenceBox->SetRelativeLocation(FVector(-1500.0f, 0.0f, -1400.0f));
-	WakeTurbulenceBox->InitBoxExtent(FVector(3500.0f, 3200.0f, 1400.0f));
+	WakeTurbulenceBox->SetRelativeLocation(WakeBoxOffset);
+	WakeTurbulenceBox->InitBoxExtent(WakeBoxExtent);
 	WakeTurbulenceBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	WakeTurbulenceBox->SetCollisionResponseToAllChannels(ECR_Overlap);
 	WakeTurbulenceBox->SetGenerateOverlapEvents(true);
-	WakeTurbulenceBox->SetHiddenInGame(false);
+	WakeTurbulenceBox->SetHiddenInGame(true);
 
 	JetWakeVFX = CreateDefaultSubobject<UNiagaraComponent>(TEXT("JetWakeVFX"));
 	JetWakeVFX->SetupAttachment(MovingJetCarriage);
@@ -86,18 +86,18 @@ void APrivateJet::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Stratospheric minimum altitude safety enforcement (4200u, above the 3900u glider ceiling)
-	if (GetActorLocation().Z < 4100.0f)
+	// Stratospheric minimum altitude safety enforcement (JetAltitude, above the 3900u glider ceiling)
+	if (GetActorLocation().Z < JetAltitude)
 	{
 		FVector CorrectedLoc = GetActorLocation();
-		CorrectedLoc.Z = 4200.0f;
+		CorrectedLoc.Z = JetAltitude;
 		SetActorLocation(CorrectedLoc);
 	}
 
 	if (WakeTurbulenceBox)
 	{
-		WakeTurbulenceBox->SetRelativeLocation(FVector(-1500.0f, 0.0f, -1400.0f));
-		WakeTurbulenceBox->SetBoxExtent(FVector(3500.0f, 3200.0f, 1400.0f));
+		WakeTurbulenceBox->SetRelativeLocation(WakeBoxOffset);
+		WakeTurbulenceBox->SetBoxExtent(WakeBoxExtent);
 	}
 
 	FinishFlybyPass();
@@ -152,7 +152,7 @@ FText APrivateJet::GetCurrentBannerSlogan() const
 	{
 		return BannerSlogans[CurrentSloganIndex];
 	}
-	return FText::FromString(TEXT("ON MY WAY TO CLIMATE SUMMIT!"));
+	return BannerSlogans.IsValidIndex(0) ? BannerSlogans[0] : FText::GetEmpty();
 }
 
 bool APrivateJet::IsLethalCrashHazard_Implementation(const UPrimitiveComponent* HazardComponent) const
@@ -176,12 +176,12 @@ void APrivateJet::BeginApproachWarning()
 	bIsFlyingPass = false;
 	WaitTimer = ApproachWarningLeadSeconds;
 
+	const FText ActiveSlogan = GetCurrentBannerSlogan();
 	if (BannerSlogans.Num() > 0)
 	{
 		CurrentSloganIndex = (CurrentSloganIndex + 1) % BannerSlogans.Num();
 	}
 
-	const FText ActiveSlogan = GetCurrentBannerSlogan();
 	if (BannerTextRender)
 	{
 		BannerTextRender->SetText(ActiveSlogan);
@@ -199,6 +199,13 @@ void APrivateJet::StartFlybyPass()
 
 	if (MovingJetCarriage)
 	{
+		// Snap to spline start first so the jet and wake do not render one frame at the previous position
+		if (FlightSpline)
+		{
+			MovingJetCarriage->SetWorldLocationAndRotation(
+				FlightSpline->GetLocationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World),
+				FlightSpline->GetRotationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
+		}
 		MovingJetCarriage->SetVisibility(true, true);
 	}
 

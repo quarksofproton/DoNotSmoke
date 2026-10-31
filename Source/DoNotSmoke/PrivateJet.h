@@ -16,7 +16,7 @@ class UNiagaraComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnJetApproachStateChangedSignature, bool, bIsApproachingOrPassing, FText, ActiveBannerSlogan);
 
 /**
- * Stratospheric VIP Private Jet (3000u altitude) flying along a spline path.
+ * Stratospheric VIP Private Jet (4200u altitude) flying along a spline path.
  * Broadcasts HUD approach warnings (!), displays rotating satirical COP31 greenwashing banners,
  * and trails a non-lethal WakeTurbulenceBox causing downwash altitude loss via IBPI_FlightHazard.
  */
@@ -80,7 +80,7 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UTextRenderComponent> BannerTextRender;
 
-	/** Trailing wake turbulence volume extending downward into the glider flight band (1800u-2600u). */
+	/** Trailing wake turbulence volume spanning 4200u (jet altitude) down to 1400u (chimney top height) to catch gliders in the flight band. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBoxComponent> WakeTurbulenceBox;
 
@@ -90,6 +90,18 @@ private:
 	// ==========================================
 	// DESIGNER TUNING / CONFIG (GDD Sec 3.3 & 5)
 	// ==========================================
+	/** World Z altitude (units) the jet is snapped to on BeginPlay if it was placed below it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
+	float JetAltitude = 4200.0f;
+
+	/** Wake box location relative to the jet carriage (centre sits 1400u below jet altitude). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
+	FVector WakeBoxOffset = FVector(-1500.0f, 0.0f, -1400.0f);
+
+	/** Wake box half-extent; with the offset it spans 4200u down to 1400u relative to the jet. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
+	FVector WakeBoxExtent = FVector(3500.0f, 3200.0f, 1400.0f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	float JetFlightSpeed = 2800.0f;
 
@@ -101,7 +113,7 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	float ApproachWarningLeadSeconds = 2.5f;
 
-	/** Downward velocity (units/sec) applied to the Glider when caught inside the trailing wake turbulence. */
+	/** Downward velocity (units/sec) applied to the Glider when caught inside the trailing wake turbulence, down to the glider's WakeTargetFloorAltitude (1350u). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	float WakeDownwashSpeed = 2400.0f;
 

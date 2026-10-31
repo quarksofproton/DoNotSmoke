@@ -8,7 +8,6 @@
 #include "GameplayInterfaces.h"
 #include "DoNotSmokeGameMode.generated.h"
 
-class UProgressBar;
 class UTextBlock;
 class UImage;
 class UButton;
@@ -145,6 +144,9 @@ private:
 	bool bBuiltFallbackTree = false;
 	float BlinkTime = 0.0f;
 
+	/** Last text pushed to StacksAndCO2Text, so SetText only runs when the string changes. */
+	FString LastStatusText;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> CooldownRingMID;
 
@@ -229,6 +231,8 @@ class DONOTSMOKE_API UDoNotSmokeSummaryWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UDoNotSmokeSummaryWidget(const FObjectInitializer& ObjectInitializer);
+
 	virtual void NativeOnInitialized() override;
 
 	UFUNCTION(BlueprintCallable, Category = "Summary")
@@ -254,6 +258,7 @@ public:
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
 private:
 	bool bBuiltFallbackTree = false;
@@ -389,8 +394,13 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
 	float SkyChokeCarbonMultiplier = 2.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DoNotSmoke|Debug", meta = (AllowPrivateAccess = "true"))
-	bool bShowDebugHUD = true;
+	/** 3 stars when cumulative carbon stays within this multiple of C_min (Default: 1.25x). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
+	float ThreeStarCarbonMultiplier = 1.25f;
+
+	/** 2 stars when cumulative carbon stays within this multiple of C_min (Default: 1.75x). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
+	float TwoStarCarbonMultiplier = 1.75f;
 
 	// ==========================================
 	// INTERNAL STATE
