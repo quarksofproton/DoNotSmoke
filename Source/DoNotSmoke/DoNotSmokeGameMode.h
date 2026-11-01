@@ -682,7 +682,7 @@ protected:
 	TObjectPtr<USoundBase> LevelMusic;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Audio")
-	float LevelMusicVolume = 0.45f;
+	float LevelMusicVolume = 0.2f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> LevelMusicAudio;
