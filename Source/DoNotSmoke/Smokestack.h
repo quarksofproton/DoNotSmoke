@@ -237,14 +237,13 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UStaticMesh> MeshHeavy;
 
+	/** Solar-panel seal cap, used on every mouth of every archetype and scaled to the mouth's shaft radius. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UStaticMesh> SealMeshSingle;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UStaticMesh> SealMeshCluster;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UStaticMesh> SealMeshHeavy;
+	/** Radius of SealMeshSingle as authored (580u wide plate); a mouth of this radius shows the cap at scale 1. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float SealMeshRadius = 290.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraSystem> ToxicSmogSystem;

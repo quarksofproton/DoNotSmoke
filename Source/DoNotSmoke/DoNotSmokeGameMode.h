@@ -44,6 +44,9 @@ public:
 	/** Re-reads the fixed HUD labels after the language was changed on the pause menu. */
 	void RefreshLocalizedTexts();
 
+	/** Fades the view in from black over Seconds (after the title screen faded out). */
+	void StartFadeIn(float Seconds);
+
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UImage> CrosshairImage;
 
@@ -209,6 +212,13 @@ private:
 	TObjectPtr<UTextBlock> CountdownText;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UImage> FadeInOverlay;
+
+	/** Real seconds into the fade-in; negative while no fade runs. */
+	float FadeInElapsed = -1.0f;
+	float FadeInDuration = 0.6f;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UWidget> ControlsPanel;
 
 	/** Timer ring in the panel's bottom-right corner; empties as the panel's time runs out. */
@@ -360,6 +370,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
 	TObjectPtr<UTexture2D> CarbonIconTexture;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
+	TObjectPtr<UTexture2D> ButtonPanelTexture;
+
 	/** Valley photo per star rating: index 0 = 1 star (grim), 1 = 2 stars (clearing), 2 = 3 stars (sunny). */
 	UPROPERTY(EditDefaultsOnly, Category = "Summary|Assets")
 	TArray<TObjectPtr<UTexture2D>> ValleyPhotoTextures;
@@ -415,6 +428,7 @@ public:
 	UDoNotSmokeMainMenuWidget(const FObjectInitializer& ObjectInitializer);
 
 	virtual void NativeOnInitialized() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -425,6 +439,18 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Assets")
 	TObjectPtr<UTexture2D> GameIconTexture;
+
+	/** Full-screen start art behind the title screen (the pause menu shows the frozen frame instead). */
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Assets")
+	TObjectPtr<UTexture2D> StartBackgroundTexture;
+
+	/** Fade to black after Play, before the level takes over. */
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Tuning")
+	float FadeOutSeconds = 0.4f;
+
+	/** Berf's button background, shared by every menu button. */
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Assets")
+	TObjectPtr<UTexture2D> ButtonPanelTexture;
 
 private:
 	bool bBuiltFallbackTree = false;
@@ -451,8 +477,40 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> QuitText;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> FadeOverlay;
+
+	/** Real seconds into the fade-out after Play; negative while not fading. */
+	float FadeOutElapsed = -1.0f;
+
+	/** "Quit the game?" dialog shown over the menu before QUIT / EXIT actually quits. */
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> ConfirmPanel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> ConfirmYesButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> ConfirmNoButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ConfirmQuestionText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ConfirmYesText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ConfirmNoText;
+
 	void BuildFallbackWidgetTree();
 	void RefreshTexts();
+	void SetConfirmVisible(bool bVisible);
+
+	UFUNCTION()
+	void HandleConfirmYesClicked();
+
+	UFUNCTION()
+	void HandleConfirmNoClicked();
 
 	UFUNCTION()
 	void HandlePlayClicked();
@@ -572,9 +630,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DoNotSmoke|Flow")
 	void TriggerInstantRestart();
 
-	/** Title screen Play button: hides the menu and starts the countdown. */
+	/** Title screen Play button: hides the menu and starts the countdown; bFadeIn fades the level in from black. */
 	UFUNCTION(BlueprintCallable, Category = "DoNotSmoke|Flow")
-	void StartFlightFromMenu();
+	void StartFlightFromMenu(bool bFadeIn = false);
 
 	/** Called by the HUD on "RENEW IT!": unpauses the level so the flight begins. */
 	void HandleCountdownFinished();
@@ -628,6 +686,10 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> LevelMusicAudio;
+
+	/** Fade from black when the level replaces the title screen. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	float LevelFadeInSeconds = 0.6f;
 
 private:
 	// ==========================================

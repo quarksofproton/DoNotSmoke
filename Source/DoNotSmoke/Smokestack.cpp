@@ -22,8 +22,6 @@ namespace
 	const TCHAR* const MeshCluster3Path = TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Cluster_3/StaticMeshes/SM_Smokestack_Cluster_3.SM_Smokestack_Cluster_3");
 	const TCHAR* const MeshHeavyPath = TEXT("/Game/Game/Meshes/Rev3/SM_Smokestack_Heavy/StaticMeshes/SM_Smokestack_Heavy.SM_Smokestack_Heavy");
 	const TCHAR* const SealMeshSinglePath = TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Single/StaticMeshes/SM_Seal_Single.SM_Seal_Single");
-	const TCHAR* const SealMeshClusterPath = TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Cluster/StaticMeshes/SM_Seal_Cluster.SM_Seal_Cluster");
-	const TCHAR* const SealMeshHeavyPath = TEXT("/Game/Game/Meshes/Rev3/SM_Seal_Heavy/StaticMeshes/SM_Seal_Heavy.SM_Seal_Heavy");
 }
 
 ASmokestack::ASmokestack()
@@ -180,17 +178,6 @@ ASmokestack::ASmokestack()
 		SealMeshSingle = SealSingleAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealClusterAsset(SealMeshClusterPath);
-	if (SealClusterAsset.Succeeded())
-	{
-		SealMeshCluster = SealClusterAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SealHeavyAsset(SealMeshHeavyPath);
-	if (SealHeavyAsset.Succeeded())
-	{
-		SealMeshHeavy = SealHeavyAsset.Object;
-	}
 
 	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> ToxicSmogAsset(TEXT("/Game/Game/VFX/NS_ToxicSmog.NS_ToxicSmog"));
 	if (ToxicSmogAsset.Succeeded())
@@ -533,8 +520,6 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	ResolveRev3Mesh(MeshCluster3, MeshCluster3Path);
 	ResolveRev3Mesh(MeshHeavy, MeshHeavyPath);
 	ResolveRev3Mesh(SealMeshSingle, SealMeshSinglePath);
-	ResolveRev3Mesh(SealMeshCluster, SealMeshClusterPath);
-	ResolveRev3Mesh(SealMeshHeavy, SealMeshHeavyPath);
 
 	// Exact mouth heights & offsets from dimensions.json (Revision 3):
 	// Assembly_Single: 1 mouth at (0, 0, 1200)
@@ -547,7 +532,6 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	int32 ActiveMouths = 1;
 	FVector MouthOffsets[3] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
 	UStaticMesh* DesiredBodyMesh = MeshSingle;
-	UStaticMesh* DesiredSealMesh = SealMeshSingle;
 
 	switch (SmokestackType)
 	{
@@ -557,7 +541,6 @@ void ASmokestack::RefreshArchetypeCollisionState()
 		ActiveMouths = 1;
 		MouthOffsets[0] = FVector(0.0f, 0.0f, MouthHeightZ);
 		DesiredBodyMesh = MeshSingle;
-		DesiredSealMesh = SealMeshSingle;
 		break;
 
 	case ESmokestackType::Clustered:
@@ -577,7 +560,6 @@ void ASmokestack::RefreshArchetypeCollisionState()
 			MouthOffsets[1] = FVector(340.0f, 0.0f, MouthHeightZ);
 			DesiredBodyMesh = MeshCluster2 ? MeshCluster2 : MeshCluster;
 		}
-		DesiredSealMesh = SealMeshCluster ? SealMeshCluster : SealMeshSingle;
 		break;
 
 	case ESmokestackType::HeavyLethal:
@@ -586,7 +568,6 @@ void ASmokestack::RefreshArchetypeCollisionState()
 		ActiveMouths = 1;
 		MouthOffsets[0] = FVector(0.0f, 0.0f, MouthHeightZ);
 		DesiredBodyMesh = MeshHeavy;
-		DesiredSealMesh = SealMeshHeavy;
 		break;
 	}
 
@@ -639,10 +620,12 @@ void ASmokestack::RefreshArchetypeCollisionState()
 
 		if (SealCaps[i])
 		{
-			if (DesiredSealMesh)
+			// One solar-panel cap for every archetype, sized to this mouth's shaft
+			if (SealMeshSingle)
 			{
-				SealCaps[i]->SetStaticMesh(DesiredSealMesh);
+				SealCaps[i]->SetStaticMesh(SealMeshSingle);
 			}
+			SealCaps[i]->SetRelativeScale3D(FVector(ShaftRadius / FMath::Max(SealMeshRadius, 1.0f)));
 			SealCaps[i]->SetVisibility(bIsMouthActive && bIsThisMouthSealed);
 		}
 

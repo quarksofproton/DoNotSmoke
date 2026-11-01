@@ -153,6 +153,13 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Glider|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USphereComponent> GliderCollisionSphere;
 
+	/** Wing hit spheres: the root sphere only covers the fuselage, these reach roughly three quarters of each wing. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Glider|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USphereComponent> LeftWingCollision;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Glider|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USphereComponent> RightWingCollision;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Glider|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USkeletalMeshComponent> GliderMesh;
 
@@ -356,6 +363,16 @@ private:
 
 	UFUNCTION()
 	void HandleGliderOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex,
+		bool bFromSweep,
+		const FHitResult& SweepResult);
+
+	/** Wing spheres only overlap (the kinematic sweep moves the root alone), so they apply the crash rules on overlap. */
+	UFUNCTION()
+	void HandleWingOverlap(
 		UPrimitiveComponent* OverlappedComponent,
 		AActor* OtherActor,
 		UPrimitiveComponent* OtherComp,

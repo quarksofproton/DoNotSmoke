@@ -37,6 +37,22 @@ AGliderPawn::AGliderPawn()
 	GliderCollisionSphere->SetNotifyRigidBodyCollision(true);
 	SetRootComponent(GliderCollisionSphere);
 
+	// SM_SolarGlider spans ~±225u at its 0.42 scale; each sphere reaches from 85u to 175u out along the wing
+	auto InitWingCollision = [this](const TCHAR* Name, float SideY) -> USphereComponent*
+	{
+		USphereComponent* Wing = CreateDefaultSubobject<USphereComponent>(Name);
+		Wing->SetupAttachment(GliderCollisionSphere);
+		Wing->SetRelativeLocation(FVector(0.0f, SideY, 0.0f));
+		Wing->InitSphereRadius(45.0f);
+		Wing->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		Wing->SetCollisionObjectType(ECC_Pawn);
+		Wing->SetCollisionResponseToAllChannels(ECR_Overlap);
+		Wing->SetGenerateOverlapEvents(true);
+		return Wing;
+	};
+	LeftWingCollision = InitWingCollision(TEXT("LeftWingCollision"), -130.0f);
+	RightWingCollision = InitWingCollision(TEXT("RightWingCollision"), 130.0f);
+
 	GliderMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("GliderMesh"));
 	GliderMesh->SetupAttachment(GliderCollisionSphere);
 	GliderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -152,6 +168,13 @@ void AGliderPawn::BeginPlay()
 	{
 		GliderCollisionSphere->OnComponentBeginOverlap.AddDynamic(this, &AGliderPawn::HandleGliderOverlap);
 		GliderCollisionSphere->OnComponentHit.AddDynamic(this, &AGliderPawn::HandleGliderHit);
+	}
+	for (USphereComponent* Wing : { LeftWingCollision.Get(), RightWingCollision.Get() })
+	{
+		if (Wing)
+		{
+			Wing->OnComponentBeginOverlap.AddDynamic(this, &AGliderPawn::HandleWingOverlap);
+		}
 	}
 
 	if (UWorld* World = GetWorld())
@@ -800,6 +823,38 @@ void AGliderPawn::HandleGliderOverlap(
 		{
 			ApplyWakeTurbulence(Downwash, 3.0f);
 		}
+	}
+}
+
+void AGliderPawn::HandleWingOverlap(
+	UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
+{
+	// Our own capsule projectiles leave from the nose and may brush a wing
+	if (bHasCrashed || !OtherActor || OtherActor == this || OtherActor->GetOwner() == this || !OtherComp)
+	{
+		return;
+	}
+
+	if (OtherActor->Implements<UBPI_FlightHazard>())
+	{
+		if (IBPI_FlightHazard::Execute_IsLethalCrashHazard(OtherActor, OtherComp))
+		{
+			// Solid hazards (chimney bodies) block pawns; the Type C plume is an overlap-only volume
+			const bool bSolid = OtherComp->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block;
+			TriggerCrash(bSolid ? EGliderCrashCause::Smokestack : EGliderCrashCause::ToxicPlume);
+		}
+		return;
+	}
+
+	// Any other geometry that would stop the fuselage also stops a wing
+	if (OtherComp->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block)
+	{
+		TriggerCrash(EGliderCrashCause::Ground);
 	}
 }
 

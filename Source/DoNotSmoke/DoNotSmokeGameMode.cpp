@@ -102,24 +102,43 @@ namespace DoNotSmokeUI
 		Text->SetFont(Font);
 	}
 
-	/** Placeholder button: a flat rounded rectangle that brightens on hover, until Berf's button art arrives. */
-	static UButton* MakeFlatButton(UWidgetTree* Tree, const FName Name, const FLinearColor& Color, UTextBlock* Label)
+	/**
+	 * Menu button on Berf's panel art (T_UI_ButtonPanel), drawn 9-sliced so the red end cap and bevels keep their size
+	 * on any button shape; brightens on hover. Without the art it falls back to a flat rounded rectangle in Color.
+	 */
+	static UButton* MakeFlatButton(UWidgetTree* Tree, const FName Name, const FLinearColor& Color, UTextBlock* Label, UTexture2D* PanelArt = nullptr)
 	{
 		UButton* Button = Tree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
 
 		FSlateBrush Brush;
-		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
-		Brush.OutlineSettings = FSlateBrushOutlineSettings(10.0f);
-		Brush.TintColor = FSlateColor(Color);
+		FLinearColor Tint = Color;
+		FMargin LabelPadding(0.0f);
+		if (PanelArt)
+		{
+			// Box slices are sized in texture pixels, so the art is imported at 530x100 (Berf's 2120x400 / 4);
+			// the margins cover the red cap (left), the bevels (top/bottom) and the right edge
+			Brush.SetResourceObject(PanelArt);
+			Brush.ImageSize = FVector2D(530.0f, 100.0f);
+			Brush.DrawAs = ESlateBrushDrawType::Box;
+			Brush.Margin = FMargin(0.07f, 0.17f, 0.05f, 0.17f);
+			Tint = FLinearColor::White;
+			LabelPadding = FMargin(16.0f, 0.0f, 8.0f, 0.0f);
+		}
+		else
+		{
+			Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+			Brush.OutlineSettings = FSlateBrushOutlineSettings(10.0f);
+		}
+		Brush.TintColor = FSlateColor(Tint);
 
 		FButtonStyle Style = Button->GetStyle();
 		Style.Normal = Brush;
 		Style.Hovered = Brush;
-		Style.Hovered.TintColor = FSlateColor(Color * 1.35f);
+		Style.Hovered.TintColor = FSlateColor(PanelArt ? FLinearColor(1.25f, 1.25f, 1.25f, 1.0f) : Tint * 1.35f);
 		Style.Pressed = Brush;
-		Style.Pressed.TintColor = FSlateColor(Color * 0.7f);
-		Style.NormalPadding = FMargin(0.0f);
-		Style.PressedPadding = FMargin(0.0f, 3.0f, 0.0f, 0.0f);
+		Style.Pressed.TintColor = FSlateColor(PanelArt ? FLinearColor(0.75f, 0.75f, 0.75f, 1.0f) : Tint * 0.7f);
+		Style.NormalPadding = LabelPadding;
+		Style.PressedPadding = LabelPadding + FMargin(0.0f, 3.0f, 0.0f, 0.0f);
 		Button->SetStyle(Style);
 
 		Label->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -149,13 +168,13 @@ namespace HUDLayout
 {
 	static const FVector2D CrosshairSize(100.0f, 100.0f);
 	static const FVector2D CooldownRingSize(60.0f, 60.0f);
-	static const FVector2D ControlsRingSize(40.0f, 40.0f);
+	static const FVector2D ControlsRingSize(36.0f, 36.0f);
 
 	static const FVector2D BatterySize(340.0f, 340.0f);
 	static const FVector2D BatteryPosition(-97.0f, 0.0f);
-	// Sun-bolt icon centred over the arc's top cap (cap centre at U 0.57, top edge at V 0.09 of the 800x800 art)
+	// Sun-bolt icon over the very end of the arc (its top tip at U 0.67, V 0.09 of the 800x800 art)
 	static const FVector2D BatteryIconSize(84.0f, 84.0f);
-	static const FVector2D BatteryIconPosition(BatteryPosition.X + BatterySize.X * 0.57f, BatterySize.Y * (0.09f - 0.5f) - 44.0f);
+	static const FVector2D BatteryIconPosition(BatteryPosition.X + BatterySize.X * 0.67f, BatterySize.Y * (0.09f - 0.5f) - 38.0f);
 	// Vertical extent of the coloured arc inside its 800x800 texture
 	static constexpr float BatteryArcTopV = 132.0f / 800.0f;
 	static constexpr float BatteryArcBottomV = 668.0f / 800.0f;
@@ -253,7 +272,7 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 	AltimeterArrow = AddImage(WidgetTree, RootCanvas, TEXT("AltimeterArrow"), AltimeterArrowTexture, RightCenter, FVector2D(0.0f, 0.5f), FVector2D::ZeroVector, HUDLayout::ArrowSize);
 	AltitudeText = MakeText(WidgetTree, TEXT("AltitudeText"), 12, FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
 	SetBold(AltitudeText);
-	AddText(RootCanvas, AltitudeText, RightCenter, FVector2D(HUDLayout::RulerPosition.X - HUDLayout::RulerSize.X * 0.5f, (HUDLayout::RulerWindowV - 0.5f) * HUDLayout::RulerSize.Y));
+	AddText(RootCanvas, AltitudeText, RightCenter, FVector2D(HUDLayout::RulerPosition.X - HUDLayout::RulerSize.X * 0.5f, (HUDLayout::RulerWindowV - 0.5f) * HUDLayout::RulerSize.Y + 4.0f));
 
 	// 4. Center: cooldown ring stack + crosshair (repositioned every tick onto the projected aim point)
 	CooldownRingBase = AddImage(WidgetTree, RootCanvas, TEXT("CooldownRingBase"), RingDarkTexture, TopLeft, Centered, FVector2D(960.0f, 540.0f), HUDLayout::CooldownRingSize);
@@ -293,7 +312,16 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 	// 8. Top left: controls tutorial panel (shown at takeoff, fades out later)
 	BuildControlsPanel(RootCanvas);
 
-	// 9. Center: big "3, 2, 1, RENEW IT!" countdown
+	// 9. Black overlay for the fade in from the title screen (under the countdown so the "3" shows at once)
+	FadeInOverlay = AddImage(WidgetTree, RootCanvas, TEXT("FadeInOverlay"), nullptr, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+	if (UCanvasPanelSlot* FadeSlot = Cast<UCanvasPanelSlot>(FadeInOverlay->Slot))
+	{
+		FadeSlot->SetOffsets(FMargin(0.0f));
+	}
+	FadeInOverlay->SetColorAndOpacity(FLinearColor::Black);
+	FadeInOverlay->SetVisibility(ESlateVisibility::Collapsed);
+
+	// 10. Center: big "3, 2, 1, RENEW IT!" countdown
 	CountdownText = MakeText(WidgetTree, TEXT("CountdownText"), 120, FLinearColor(1.0f, 0.86f, 0.25f, 1.0f));
 	SetBold(CountdownText);
 	FSlateFontInfo CountdownFont = CountdownText->GetFont();
@@ -316,7 +344,7 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 
 	UVerticalBox* Rows = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ControlsRows"));
 
-	UTextBlock* Title = MakeText(WidgetTree, TEXT("ControlsTitle"), 22, KeyColor);
+	UTextBlock* Title = MakeText(WidgetTree, TEXT("ControlsTitle"), 20, KeyColor);
 	SetBold(Title);
 	Title->SetJustification(ETextJustify::Left);
 	Title->SetText(DoNotSmokeLocale::Text(TEXT("CtrlTitle")));
@@ -335,15 +363,15 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 
 		USizeBox* KeyBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-		KeyBox->SetWidthOverride(192.0f);
-		UTextBlock* KeyText = MakeText(WidgetTree, NAME_None, 18, KeyColor);
+		KeyBox->SetWidthOverride(173.0f);
+		UTextBlock* KeyText = MakeText(WidgetTree, NAME_None, 16, KeyColor);
 		SetBold(KeyText);
 		KeyText->SetJustification(ETextJustify::Left);
 		KeyText->SetText(DoNotSmokeLocale::Text(RowKey[0]));
 		KeyBox->AddChild(KeyText);
 		Row->AddChildToHorizontalBox(KeyBox);
 
-		UTextBlock* ActionText = MakeText(WidgetTree, NAME_None, 18, ActionColor);
+		UTextBlock* ActionText = MakeText(WidgetTree, NAME_None, 16, ActionColor);
 		ActionText->SetJustification(ETextJustify::Left);
 		ActionText->SetText(DoNotSmokeLocale::Text(RowKey[1]));
 		Row->AddChildToHorizontalBox(ActionText);
@@ -353,7 +381,7 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 
 	// Last row: hint on the left, draining timer ring in the bottom-right corner (same ring art as the seal cooldown)
 	UHorizontalBox* HintRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ControlsHintRow"));
-	UTextBlock* Hint = MakeText(WidgetTree, TEXT("ControlsHint"), 16, FLinearColor(0.7f, 0.85f, 1.0f, 1.0f));
+	UTextBlock* Hint = MakeText(WidgetTree, TEXT("ControlsHint"), 14, FLinearColor(0.7f, 0.85f, 1.0f, 1.0f));
 	Hint->SetJustification(ETextJustify::Left);
 	Hint->SetText(DoNotSmokeLocale::Text(TEXT("CtrlHint")));
 	if (UHorizontalBoxSlot* HintSlot = HintRow->AddChildToHorizontalBox(Hint))
@@ -381,7 +409,7 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 
 	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ControlsPanel"));
 	Panel->SetBrushColor(FLinearColor(0.02f, 0.03f, 0.05f, 0.6f));
-	Panel->SetPadding(FMargin(22.0f, 17.0f));
+	Panel->SetPadding(FMargin(20.0f, 15.0f));
 	Panel->SetContent(Rows);
 	Panel->SetVisibility(ESlateVisibility::Collapsed);
 	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(Panel))
@@ -391,6 +419,17 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 		CanvasSlot->SetAutoSize(true);
 	}
 	ControlsPanel = Panel;
+}
+
+void UDoNotSmokeFlightHUDWidget::StartFadeIn(float Seconds)
+{
+	FadeInDuration = FMath::Max(Seconds, 0.05f);
+	FadeInElapsed = 0.0f;
+	if (FadeInOverlay)
+	{
+		FadeInOverlay->SetColorAndOpacity(FLinearColor::Black);
+		FadeInOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
 }
 
 void UDoNotSmokeFlightHUDWidget::RefreshLocalizedTexts()
@@ -565,7 +604,18 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 
 	BlinkTime += InDeltaTime;
 
-	// Widgets tick on real time, so the countdown runs while the level is still paused
+	// Widgets tick on real time, so the countdown and fade-in run while the level is still paused
+	if (FadeInOverlay && FadeInElapsed >= 0.0f)
+	{
+		FadeInElapsed += InDeltaTime;
+		const float Alpha = 1.0f - FMath::Clamp(FadeInElapsed / FadeInDuration, 0.0f, 1.0f);
+		FadeInOverlay->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, Alpha));
+		if (Alpha <= 0.0f)
+		{
+			FadeInOverlay->SetVisibility(ESlateVisibility::Collapsed);
+			FadeInElapsed = -1.0f;
+		}
+	}
 	TickCountdown(InDeltaTime);
 	TickControlsPanel(InDeltaTime);
 
@@ -947,6 +997,7 @@ UDoNotSmokeSummaryWidget::UDoNotSmokeSummaryWidget(const FObjectInitializer& Obj
 	ProhibitionTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Prohibition.T_UI_Prohibition"));
 	StackPuffTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_StackPuff.T_UI_StackPuff"));
 	CarbonIconTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_SmokeCloud.T_UI_SmokeCloud"));
+	ButtonPanelTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ButtonPanel.T_UI_ButtonPanel"));
 	ValleyPhotoTextures = {
 		FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Valley1Star.T_UI_Valley1Star")),
 		FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Valley2Star.T_UI_Valley2Star")),
@@ -1114,13 +1165,13 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 		UTextBlock* Label = MakeText(WidgetTree, NAME_None, 24, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
 		SetBold(Label);
 		Label->SetText(DoNotSmokeLocale::Text(LabelKey));
-		UButton* Button = MakeFlatButton(WidgetTree, Name, Color, Label);
+		UButton* Button = MakeFlatButton(WidgetTree, Name, Color, Label, ButtonPanelTexture);
 		if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(Button))
 		{
 			CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f));
 			CanvasSlot->SetAlignment(FVector2D(0.0f, 0.5f));
 			CanvasSlot->SetPosition(FVector2D(PageSize.X * 0.5f + 48.0f, OffsetY));
-			CanvasSlot->SetSize(FVector2D(320.0f, 72.0f));
+			CanvasSlot->SetSize(FVector2D(400.0f, 72.0f));
 		}
 		return Button;
 	};
@@ -1304,6 +1355,8 @@ UDoNotSmokeMainMenuWidget::UDoNotSmokeMainMenuWidget(const FObjectInitializer& O
 {
 	using namespace DoNotSmokeUI;
 	GameIconTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_GameIcon.T_UI_GameIcon"));
+	StartBackgroundTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_StartValley.T_UI_StartValley"));
+	ButtonPanelTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ButtonPanel.T_UI_ButtonPanel"));
 
 	SetIsFocusable(true);
 }
@@ -1324,6 +1377,14 @@ void UDoNotSmokeMainMenuWidget::NativeOnInitialized()
 	if (QuitButton)
 	{
 		QuitButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeMainMenuWidget::HandleQuitClicked);
+	}
+	if (ConfirmYesButton)
+	{
+		ConfirmYesButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeMainMenuWidget::HandleConfirmYesClicked);
+	}
+	if (ConfirmNoButton)
+	{
+		ConfirmNoButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeMainMenuWidget::HandleConfirmNoClicked);
 	}
 }
 
@@ -1357,35 +1418,49 @@ void UDoNotSmokeMainMenuWidget::BuildFallbackWidgetTree()
 	WidgetTree->RootWidget = RootCanvas;
 
 	const FVector2D Centered(0.5f, 0.5f);
+	const bool bPause = IsPauseMenu();
 
-	// 1. Dim the paused valley behind the menu
-	UImage* Backdrop = AddImage(WidgetTree, RootCanvas, TEXT("MenuBackdrop"), nullptr, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
-	Backdrop->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f));
+	// The title screen sits in the open sky on the left of the start art (stacks are centre-right); the pause menu stays centred
+	const float ColumnX = bPause ? 0.5f : 0.21f;
+
+	// 1. Background: the start art on the title screen, a dim over the frozen frame on the pause menu
+	UImage* Backdrop = AddImage(WidgetTree, RootCanvas, TEXT("MenuBackdrop"), bPause ? nullptr : StartBackgroundTexture.Get(), FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+	Backdrop->SetColorAndOpacity(bPause || !StartBackgroundTexture ? FLinearColor(0.0f, 0.0f, 0.0f, 0.45f) : FLinearColor::White);
 	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Backdrop->Slot))
 	{
 		CanvasSlot->SetOffsets(FMargin(0.0f));
 	}
+	if (!bPause)
+	{
+		// Soft dark band behind the left column so white and yellow text read on the pale sky
+		UImage* Band = AddImage(WidgetTree, RootCanvas, TEXT("MenuColumnBand"), nullptr, FAnchors(0.0f, 0.0f, 0.46f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+		Band->SetColorAndOpacity(FLinearColor(0.03f, 0.04f, 0.07f, 0.45f));
+		if (UCanvasPanelSlot* BandSlot = Cast<UCanvasPanelSlot>(Band->Slot))
+		{
+			BandSlot->SetOffsets(FMargin(0.0f));
+		}
+	}
 
 	// 2. Game icon (same art as the exe / window icon)
-	AddImage(WidgetTree, RootCanvas, TEXT("MenuLogo"), GameIconTexture, FAnchors(0.5f, 0.18f), Centered, FVector2D::ZeroVector, FVector2D(230.0f, 230.0f));
+	AddImage(WidgetTree, RootCanvas, TEXT("MenuLogo"), GameIconTexture, FAnchors(ColumnX, 0.18f), Centered, FVector2D::ZeroVector, FVector2D(230.0f, 230.0f));
 
 	// 3. Title + tagline
 	UTextBlock* Title = MakeText(WidgetTree, TEXT("MenuTitle"), 76, FLinearColor(0.97f, 0.95f, 0.9f, 1.0f));
 	SetBold(Title);
 	Title->SetText(FText::FromString(TEXT("DO NOT SMOKE")));
-	AddText(RootCanvas, Title, FAnchors(0.5f, 0.38f), FVector2D::ZeroVector);
+	AddText(RootCanvas, Title, FAnchors(ColumnX, 0.38f), FVector2D::ZeroVector);
 
 	TaglineText = MakeText(WidgetTree, TEXT("MenuTagline"), 22, FLinearColor(1.0f, 0.86f, 0.25f, 1.0f));
-	AddText(RootCanvas, TaglineText, FAnchors(0.5f, 0.38f), FVector2D(0.0f, 72.0f));
+	AddText(RootCanvas, TaglineText, FAnchors(ColumnX, 0.38f), FVector2D(0.0f, 72.0f));
 
 	// 4. Buttons
 	// Buttons share one anchor and step down by a fixed pixel gap, so they never overlap on short viewports
-	const FAnchors ButtonAnchor(0.5f, 0.55f);
+	const FAnchors ButtonAnchor(ColumnX, 0.55f);
 	auto AddMenuButton = [&](const FName Name, const FLinearColor& Color, int32 Row, TObjectPtr<UTextBlock>& OutLabel) -> UButton*
 	{
 		OutLabel = MakeText(WidgetTree, NAME_None, 28, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
 		SetBold(OutLabel);
-		UButton* Button = MakeFlatButton(WidgetTree, Name, Color, OutLabel);
+		UButton* Button = MakeFlatButton(WidgetTree, Name, Color, OutLabel, ButtonPanelTexture);
 		if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(Button))
 		{
 			CanvasSlot->SetAnchors(ButtonAnchor);
@@ -1400,19 +1475,99 @@ void UDoNotSmokeMainMenuWidget::BuildFallbackWidgetTree()
 	QuitButton = AddMenuButton(TEXT("QuitButton"), FLinearColor(0.55f, 0.17f, 0.15f, 0.95f), 1, QuitText);
 
 	// 5. Language square in the bottom-right corner: each press cycles EN -> TR -> NL
-	LanguageText = MakeText(WidgetTree, TEXT("LanguageText"), 30, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
+	LanguageText = MakeText(WidgetTree, TEXT("LanguageText"), 24, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
 	SetBold(LanguageText);
-	LanguageButton = MakeFlatButton(WidgetTree, TEXT("LanguageButton"), FLinearColor(0.2f, 0.32f, 0.5f, 0.95f), LanguageText);
+	LanguageButton = MakeFlatButton(WidgetTree, TEXT("LanguageButton"), FLinearColor(0.2f, 0.32f, 0.5f, 0.95f), LanguageText, ButtonPanelTexture);
+	{
+		// The square is narrow: keep the label just clear of the red cap instead of the wide buttons' padding
+		FButtonStyle SquareStyle = LanguageButton->GetStyle();
+		SquareStyle.NormalPadding = FMargin(8.0f, 0.0f, 0.0f, 0.0f);
+		SquareStyle.PressedPadding = FMargin(8.0f, 3.0f, 0.0f, 0.0f);
+		LanguageButton->SetStyle(SquareStyle);
+	}
 	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(LanguageButton))
 	{
 		CanvasSlot->SetAnchors(FAnchors(1.0f, 1.0f));
 		CanvasSlot->SetAlignment(FVector2D(1.0f, 1.0f));
-		CanvasSlot->SetPosition(FVector2D(-32.0f, -32.0f));
-		CanvasSlot->SetSize(FVector2D(88.0f, 88.0f));
+		CanvasSlot->SetPosition(FVector2D(-14.0f, -32.0f));
+		CanvasSlot->SetSize(FVector2D(106.0f, 88.0f));
 	}
+
+	// 6. Quit confirmation: a dark box with the question and YES / NO, hidden until QUIT / EXIT is pressed
+	UCanvasPanel* ConfirmLayer = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("ConfirmLayer"));
+	if (UCanvasPanelSlot* LayerSlot = RootCanvas->AddChildToCanvas(ConfirmLayer))
+	{
+		LayerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		LayerSlot->SetOffsets(FMargin(0.0f));
+	}
+	UImage* ConfirmDim = AddImage(WidgetTree, ConfirmLayer, TEXT("ConfirmDim"), nullptr, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+	ConfirmDim->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f));
+	ConfirmDim->SetVisibility(ESlateVisibility::Visible);
+	if (UCanvasPanelSlot* DimSlot = Cast<UCanvasPanelSlot>(ConfirmDim->Slot))
+	{
+		DimSlot->SetOffsets(FMargin(0.0f));
+	}
+	UImage* ConfirmBox = AddImage(WidgetTree, ConfirmLayer, TEXT("ConfirmBox"), nullptr, FAnchors(0.5f, 0.5f), Centered, FVector2D::ZeroVector, FVector2D(560.0f, 240.0f));
+	ConfirmBox->SetColorAndOpacity(FLinearColor(0.04f, 0.05f, 0.08f, 0.95f));
+
+	ConfirmQuestionText = MakeText(WidgetTree, TEXT("ConfirmQuestion"), 30, FLinearColor(0.97f, 0.95f, 0.9f, 1.0f));
+	SetBold(ConfirmQuestionText);
+	AddText(ConfirmLayer, ConfirmQuestionText, FAnchors(0.5f, 0.5f), FVector2D(0.0f, -52.0f));
+
+	auto AddConfirmButton = [&](const FName Name, const FLinearColor& Color, float OffsetX, TObjectPtr<UTextBlock>& OutLabel) -> UButton*
+	{
+		OutLabel = MakeText(WidgetTree, NAME_None, 26, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
+		SetBold(OutLabel);
+		UButton* Button = MakeFlatButton(WidgetTree, Name, Color, OutLabel, ButtonPanelTexture);
+		if (UCanvasPanelSlot* CanvasSlot = ConfirmLayer->AddChildToCanvas(Button))
+		{
+			CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+			CanvasSlot->SetAlignment(Centered);
+			CanvasSlot->SetPosition(FVector2D(OffsetX, 44.0f));
+			CanvasSlot->SetSize(FVector2D(200.0f, 68.0f));
+		}
+		return Button;
+	};
+	ConfirmYesButton = AddConfirmButton(TEXT("ConfirmYesButton"), FLinearColor(0.55f, 0.17f, 0.15f, 0.95f), -120.0f, ConfirmYesText);
+	ConfirmNoButton = AddConfirmButton(TEXT("ConfirmNoButton"), FLinearColor(0.2f, 0.32f, 0.5f, 0.95f), 120.0f, ConfirmNoText);
+	ConfirmPanel = ConfirmLayer;
+	ConfirmPanel->SetVisibility(ESlateVisibility::Collapsed);
+
+	// 7. Black overlay for the fade into the level (topmost)
+	FadeOverlay = AddImage(WidgetTree, RootCanvas, TEXT("FadeOverlay"), nullptr, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+	if (UCanvasPanelSlot* FadeSlot = Cast<UCanvasPanelSlot>(FadeOverlay->Slot))
+	{
+		FadeSlot->SetOffsets(FMargin(0.0f));
+	}
+	FadeOverlay->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+	FadeOverlay->SetVisibility(ESlateVisibility::Collapsed);
 
 	RefreshTexts();
 	bBuiltFallbackTree = true;
+}
+
+void UDoNotSmokeMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (FadeOutElapsed < 0.0f || !FadeOverlay)
+	{
+		return;
+	}
+
+	FadeOutElapsed += InDeltaTime;
+	const float Alpha = FMath::Clamp(FadeOutElapsed / FMath::Max(FadeOutSeconds, 0.05f), 0.0f, 1.0f);
+	FadeOverlay->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, Alpha));
+	FadeOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	if (Alpha >= 1.0f)
+	{
+		FadeOutElapsed = -1.0f;
+		if (ADoNotSmokeGameMode* GM = Cast<ADoNotSmokeGameMode>(UGameplayStatics::GetGameMode(this)))
+		{
+			GM->StartFlightFromMenu(true);
+		}
+	}
 }
 
 void UDoNotSmokeMainMenuWidget::RefreshTexts()
@@ -1422,11 +1577,50 @@ void UDoNotSmokeMainMenuWidget::RefreshTexts()
 	if (PlayText) { PlayText->SetText(DoNotSmokeLocale::Text(bPause ? TEXT("PauseResume") : TEXT("MenuPlay"))); }
 	if (LanguageText) { LanguageText->SetText(DoNotSmokeLocale::Text(TEXT("MenuLanguage"))); }
 	if (QuitText) { QuitText->SetText(DoNotSmokeLocale::Text(bPause ? TEXT("PauseExit") : TEXT("MenuQuit"))); }
+	if (ConfirmQuestionText) { ConfirmQuestionText->SetText(DoNotSmokeLocale::Text(TEXT("ConfirmQuit"))); }
+	if (ConfirmYesText) { ConfirmYesText->SetText(DoNotSmokeLocale::Text(TEXT("ConfirmYes"))); }
+	if (ConfirmNoText) { ConfirmNoText->SetText(DoNotSmokeLocale::Text(TEXT("ConfirmNo"))); }
+}
+
+void UDoNotSmokeMainMenuWidget::SetConfirmVisible(bool bVisible)
+{
+	if (ConfirmPanel)
+	{
+		ConfirmPanel->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	// Keyboard focus follows the dialog so Enter / Esc act on it, not on the menu behind
+	if (bVisible && ConfirmNoButton)
+	{
+		ConfirmNoButton->SetKeyboardFocus();
+	}
+	else
+	{
+		SetKeyboardFocus();
+	}
+}
+
+void UDoNotSmokeMainMenuWidget::HandleConfirmYesClicked()
+{
+	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
+}
+
+void UDoNotSmokeMainMenuWidget::HandleConfirmNoClicked()
+{
+	SetConfirmVisible(false);
 }
 
 FReply UDoNotSmokeMainMenuWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
 	const FKey Key = InKeyEvent.GetKey();
+	if (ConfirmPanel && ConfirmPanel->IsVisible())
+	{
+		if (Key == EKeys::Escape)
+		{
+			SetConfirmVisible(false);
+			return FReply::Handled();
+		}
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+	}
 	if (Key == EKeys::Enter || Key == EKeys::SpaceBar || (IsPauseMenu() && Key == EKeys::Escape))
 	{
 		HandlePlayClicked();
@@ -1443,9 +1637,11 @@ void UDoNotSmokeMainMenuWidget::HandlePlayClicked()
 		{
 			GM->ResumeFromPause();
 		}
-		else
+		else if (FadeOutElapsed < 0.0f)
 		{
-			GM->StartFlightFromMenu();
+			// Fade the title screen to black first; NativeTick hands over to the level when it is fully dark
+			FadeOutElapsed = 0.0f;
+			SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 	}
 }
@@ -1458,7 +1654,7 @@ void UDoNotSmokeMainMenuWidget::HandleLanguageClicked()
 
 void UDoNotSmokeMainMenuWidget::HandleQuitClicked()
 {
-	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
+	SetConfirmVisible(true);
 }
 
 // ==========================================
@@ -1614,7 +1810,7 @@ void ADoNotSmokeGameMode::ShowMainMenu()
 	PC->SetShowMouseCursor(true);
 }
 
-void ADoNotSmokeGameMode::StartFlightFromMenu()
+void ADoNotSmokeGameMode::StartFlightFromMenu(bool bFadeIn)
 {
 	if (MainMenuWidget)
 	{
@@ -1622,6 +1818,13 @@ void ADoNotSmokeGameMode::StartFlightFromMenu()
 		MainMenuWidget = nullptr;
 	}
 	BeginCountdown();
+
+	// The title screen faded to black; the level fades in from black under the countdown
+	// (a HUD overlay on real time, since a camera fade does not advance while the level is paused)
+	if (bFadeIn && FlightHUDWidget)
+	{
+		FlightHUDWidget->StartFadeIn(LevelFadeInSeconds);
+	}
 }
 
 void ADoNotSmokeGameMode::BeginCountdown()

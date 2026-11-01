@@ -26,6 +26,11 @@ namespace
 		{ TEXT("PauseResume"), { TEXT("RESUME"), TEXT("DEVAM ET"), TEXT("HERVATTEN") } },
 		{ TEXT("PauseExit"), { TEXT("EXIT"), TEXT("ÇIKIŞ"), TEXT("AFSLUITEN") } },
 
+		// Quit confirmation (title screen QUIT and pause menu EXIT)
+		{ TEXT("ConfirmQuit"), { TEXT("Quit the game?"), TEXT("Oyundan çıkılsın mı?"), TEXT("Het spel afsluiten?") } },
+		{ TEXT("ConfirmYes"), { TEXT("YES"), TEXT("EVET"), TEXT("JA") } },
+		{ TEXT("ConfirmNo"), { TEXT("NO"), TEXT("HAYIR"), TEXT("NEE") } },
+
 		// Countdown
 		{ TEXT("CountdownGo"), { TEXT("RENEW IT!"), TEXT("YENİLE!"), TEXT("VERNIEUW HET!") } },
 
