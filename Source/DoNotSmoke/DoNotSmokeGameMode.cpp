@@ -192,9 +192,9 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 
 	// 1. Full-screen red hazard vignette (behind everything, shown with PULL UP!)
 	HazardVignette = AddImage(WidgetTree, RootCanvas, TEXT("HazardVignette"), HazardFrameTexture, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
-	if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(HazardVignette->Slot))
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(HazardVignette->Slot))
 	{
-		Slot->SetOffsets(FMargin(0.0f));
+		CanvasSlot->SetOffsets(FMargin(0.0f));
 	}
 	HazardVignette->SetVisibility(ESlateVisibility::Collapsed);
 
@@ -532,9 +532,9 @@ void UDoNotSmokeCrashWidget::BuildFallbackWidgetTree()
 
 	// 1. Cracked-glass vignette stretched over the whole screen
 	CrackOverlay = AddImage(WidgetTree, RootCanvas, TEXT("CrackOverlay"), CrackOverlayTexture, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
-	if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CrackOverlay->Slot))
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(CrackOverlay->Slot))
 	{
-		Slot->SetOffsets(FMargin(0.0f));
+		CanvasSlot->SetOffsets(FMargin(0.0f));
 	}
 
 	// 2. Cause icon + label
@@ -566,11 +566,11 @@ void UDoNotSmokeCrashWidget::BuildFallbackWidgetTree()
 	RestartText->SetText(FText::FromString(TEXT("RESTART  [R]")));
 	RestartButton->AddChild(RestartText);
 
-	if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(RestartButton))
+	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(RestartButton))
 	{
-		Slot->SetAnchors(FAnchors(0.5f, 0.78f));
-		Slot->SetAlignment(Centered);
-		Slot->SetSize(FVector2D(440.0f, 110.0f));
+		CanvasSlot->SetAnchors(FAnchors(0.5f, 0.78f));
+		CanvasSlot->SetAlignment(Centered);
+		CanvasSlot->SetSize(FVector2D(440.0f, 110.0f));
 	}
 
 	bBuiltFallbackTree = true;
@@ -639,11 +639,11 @@ namespace NewspaperLayout
 
 	static void Place(UCanvasPanel* Page, UWidget* Widget, float X0, float Y0, float X1, float Y1)
 	{
-		if (UCanvasPanelSlot* Slot = Page->AddChildToCanvas(Widget))
+		if (UCanvasPanelSlot* CanvasSlot = Page->AddChildToCanvas(Widget))
 		{
-			Slot->SetAnchors(FAnchors(0.0f, 0.0f));
-			Slot->SetPosition(Px(X0, Y0));
-			Slot->SetSize(Px(X1 - X0, Y1 - Y0));
+			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f));
+			CanvasSlot->SetPosition(Px(X0, Y0));
+			CanvasSlot->SetSize(Px(X1 - X0, Y1 - Y0));
 		}
 	}
 
@@ -722,18 +722,18 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	// 1. Dim the frozen game behind the page
 	UImage* Backdrop = AddImage(WidgetTree, RootCanvas, TEXT("Backdrop"), nullptr, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
 	Backdrop->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f));
-	if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(Backdrop->Slot))
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Backdrop->Slot))
 	{
-		Slot->SetOffsets(FMargin(0.0f));
+		CanvasSlot->SetOffsets(FMargin(0.0f));
 	}
 
 	// 2. Page container (the reveal spins this)
 	PagePanel = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("PagePanel"));
-	if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(PagePanel))
+	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(PagePanel))
 	{
-		Slot->SetAnchors(FAnchors(0.5f, 0.5f));
-		Slot->SetAlignment(FVector2D(0.5f, 0.5f));
-		Slot->SetSize(PageSize);
+		CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+		CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+		CanvasSlot->SetSize(PageSize);
 	}
 
 	UImage* Page = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("NewspaperPage"));
@@ -769,12 +769,12 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	Place(PagePanel, PhotoClip, 76.0f, 347.0f, 724.0f, 580.0f);
 	PhotoImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PhotoImage"));
 	PhotoImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UCanvasPanelSlot* Slot = PhotoClip->AddChildToCanvas(PhotoImage))
+	if (UCanvasPanelSlot* CanvasSlot = PhotoClip->AddChildToCanvas(PhotoImage))
 	{
 		const float PhotoHeight = 648.0f * 1000.0f / 1600.0f;
-		Slot->SetAnchors(FAnchors(0.0f, 0.0f));
-		Slot->SetPosition(Px(0.0f, (233.0f - PhotoHeight) * 0.5f));
-		Slot->SetSize(Px(648.0f, PhotoHeight));
+		CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f));
+		CanvasSlot->SetPosition(Px(0.0f, (233.0f - PhotoHeight) * 0.5f));
+		CanvasSlot->SetSize(Px(648.0f, PhotoHeight));
 	}
 
 	// 6. Audit box (dashed frame): stars, CO2 vs C_min, time, accuracy
@@ -785,29 +785,29 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 
 	UVerticalBox* AuditList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("AuditList"));
 	StarsText = MakeText(WidgetTree, TEXT("StarsText"), 34, FLinearColor(0.85f, 0.2f, 0.15f, 1.0f));
-	if (UVerticalBoxSlot* Slot = AuditList->AddChildToVerticalBox(StarsText))
+	if (UVerticalBoxSlot* CanvasSlot = AuditList->AddChildToVerticalBox(StarsText))
 	{
-		Slot->SetHorizontalAlignment(HAlign_Center);
-		Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+		CanvasSlot->SetHorizontalAlignment(HAlign_Center);
+		CanvasSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
 	}
 
 	UHorizontalBox* CarbonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("CarbonRow"));
 	UImage* CarbonIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("SummaryCarbonIcon"));
 	CarbonIcon->SetBrushFromTexture(CarbonIconTexture, false);
 	CarbonIcon->SetDesiredSizeOverride(FVector2D(34.0f, 34.0f));
-	if (UHorizontalBoxSlot* Slot = CarbonRow->AddChildToHorizontalBox(CarbonIcon))
+	if (UHorizontalBoxSlot* CanvasSlot = CarbonRow->AddChildToHorizontalBox(CarbonIcon))
 	{
-		Slot->SetVerticalAlignment(VAlign_Center);
-		Slot->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+		CanvasSlot->SetVerticalAlignment(VAlign_Center);
+		CanvasSlot->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
 	}
 	CarbonText = MakeText(WidgetTree, TEXT("CarbonText"), 15, InkColor);
-	if (UHorizontalBoxSlot* Slot = CarbonRow->AddChildToHorizontalBox(CarbonText))
+	if (UHorizontalBoxSlot* CanvasSlot = CarbonRow->AddChildToHorizontalBox(CarbonText))
 	{
-		Slot->SetVerticalAlignment(VAlign_Center);
+		CanvasSlot->SetVerticalAlignment(VAlign_Center);
 	}
-	if (UVerticalBoxSlot* Slot = AuditList->AddChildToVerticalBox(CarbonRow))
+	if (UVerticalBoxSlot* CanvasSlot = AuditList->AddChildToVerticalBox(CarbonRow))
 	{
-		Slot->SetHorizontalAlignment(HAlign_Center);
+		CanvasSlot->SetHorizontalAlignment(HAlign_Center);
 	}
 
 	TimeText = MakeText(WidgetTree, TEXT("TimeText"), 15, InkColor);
@@ -826,11 +826,11 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	// 8. Confetti layer above the page, centred so piece positions are offsets from screen centre
 	ConfettiLayer = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("ConfettiLayer"));
 	ConfettiLayer->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(ConfettiLayer))
+	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(ConfettiLayer))
 	{
-		Slot->SetAnchors(FAnchors(0.5f, 0.5f));
-		Slot->SetAlignment(FVector2D(0.5f, 0.5f));
-		Slot->SetSize(FVector2D::ZeroVector);
+		CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+		CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+		CanvasSlot->SetSize(FVector2D::ZeroVector);
 	}
 
 	bBuiltFallbackTree = true;
@@ -928,10 +928,10 @@ void UDoNotSmokeSummaryWidget::BurstConfetti()
 	{
 		UImage* Piece = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 		Piece->SetColorAndOpacity(Palette[FMath::RandRange(0, UE_ARRAY_COUNT(Palette) - 1)]);
-		if (UCanvasPanelSlot* Slot = ConfettiLayer->AddChildToCanvas(Piece))
+		if (UCanvasPanelSlot* CanvasSlot = ConfettiLayer->AddChildToCanvas(Piece))
 		{
-			Slot->SetAlignment(FVector2D(0.5f, 0.5f));
-			Slot->SetSize(FVector2D(FMath::FRandRange(8.0f, 14.0f), FMath::FRandRange(14.0f, 24.0f)));
+			CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			CanvasSlot->SetSize(FVector2D(FMath::FRandRange(8.0f, 14.0f), FMath::FRandRange(14.0f, 24.0f)));
 		}
 
 		// Fountain burst from just below the page centre, biased upward
@@ -982,9 +982,9 @@ void UDoNotSmokeSummaryWidget::TickConfetti(float DeltaTime)
 		State.Position += (State.Velocity + FVector2D(FMath::Sin(State.Flutter) * 60.0f, 0.0f)) * DeltaTime;
 		State.Angle += State.AngularSpeed * DeltaTime;
 
-		if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(Piece->Slot))
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Piece->Slot))
 		{
-			Slot->SetPosition(State.Position);
+			CanvasSlot->SetPosition(State.Position);
 		}
 		Piece->SetRenderTransformAngle(State.Angle);
 		Piece->SetRenderOpacity(Opacity);
