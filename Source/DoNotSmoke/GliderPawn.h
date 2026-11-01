@@ -16,6 +16,7 @@ class UNiagaraComponent;
 class ACarbonSealProjectile;
 class UAudioComponent;
 class USoundBase;
+class APrivateJet;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPullUpWarningChangedSignature, bool, bIsWarningActive);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGliderCrashedSignature, AActor*, CrashedGlider);
@@ -82,6 +83,12 @@ public:
 	/** Valid after OnGliderCrashed has fired. */
 	UFUNCTION(BlueprintPure, Category = "Glider|Telemetry")
 	EGliderCrashCause GetLastCrashCause() const { return LastCrashCause; }
+
+	/** Invisible soft wall: the glider cannot leave this XY box but does not crash on its edge. */
+	void SetFlightBounds(const FBox2D& Bounds);
+
+	/** Turns camera motion blur off while the level is frozen behind the title screen and countdown (a frozen frame keeps its last motion vectors). */
+	void SetMotionBlurSuppressed(bool bSuppressed);
 
 	/** Applies external downward wake turbulence impulse (e.g., from passing VIP Private Jet). */
 	UFUNCTION(BlueprintCallable, Category = "Glider|Hazards")
@@ -276,7 +283,7 @@ private:
 	float AimAssistConeHalfAngleDeg = 10.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Combat", meta = (AllowPrivateAccess = "true"))
-	float AimAssistMaxRange = 12000.0f;
+	float AimAssistMaxRange = 6000.0f;
 
 	// ==========================================
 	// INTERNAL RUNTIME STATE
@@ -293,6 +300,8 @@ private:
 	float CameraYawOffset = 0.0f;
 	float CameraPitchOffset = -10.0f;
 	FRotator SmoothedCameraWorldRot = FRotator::ZeroRotator;
+
+	FBox2D FlightBounds = FBox2D(ForceInit);
 
 	float ActiveDownwashSpeed = 0.0f;
 	float DownwashTimeRemaining = 0.0f;
@@ -314,6 +323,13 @@ private:
 	bool bKeyRollRightHeld = false;
 
 	FTimerHandle SunlightTraceTimerHandle;
+
+	/** VIP jets cached once in BeginPlay: their repel field pushes the glider away and their smoke puffs block sunlight. */
+	TArray<TWeakObjectPtr<APrivateJet>> CachedJets;
+
+	/** Speed at which a jet's soft repel field pushes the glider outwards at the hard radius (fading to 0 at the soft radius). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Hazards", meta = (AllowPrivateAccess = "true"))
+	float JetRepelPushSpeed = 4500.0f;
 
 	/** Smokestack actors cached once in BeginPlay (static level actors) for per-tick aim assist. */
 	TArray<TWeakObjectPtr<AActor>> CachedSealableActors;

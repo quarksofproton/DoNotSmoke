@@ -126,9 +126,19 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UStaticMeshComponent> SealCapMesh_3;
 
-	/** Vertical hazard volume active only on Type C (HeavyLethal) while unsealed. Flying inside causes Crash. */
+	/** Lowest segment of the Type C hazard cone, active only while unsealed. Flying inside causes Crash. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCapsuleComponent> LethalPlumeCapsule;
+
+	/** Upper segments of the hazard cone; each is wider than the one below so the plume flares out like the smoke. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCapsuleComponent> LethalPlumeCone_1;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCapsuleComponent> LethalPlumeCone_2;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCapsuleComponent> LethalPlumeCone_3;
 
 	/** Overhead smog canopy blocker at world Z CanopyWorldAltitude that blocks upward sunlight LineTraces until this stack is sealed. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
@@ -190,8 +200,12 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "100.0", ClampMax = "500.0"))
 	float RimSphereRadius = 240.0f;
 
+	/** Hazard cone radius at the rim and at the top of the plume (NS_HeavyToxicSmog spreads in an 18 degree cone). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "100.0"))
-	float LethalPlumeRadius = 220.0f;
+	float LethalPlumeRadius = 260.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "100.0"))
+	float LethalPlumeTopRadius = 1100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "200.0"))
 	float LethalPlumeHalfHeight = 3400.0f;
@@ -251,10 +265,10 @@ private:
 
 	/** Sealed-rim sparkle: particles per second, sprite size multiplier and spread as a fraction of RimSphereRadius. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
-	float SealSparkleSpawnRate = 8.0f;
+	float SealSparkleSpawnRate = 30.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
-	float SealSparkleSizeScale = 0.6f;
+	float SealSparkleSizeScale = 0.2f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
 	float SealSparkleSpreadFraction = 0.7f;

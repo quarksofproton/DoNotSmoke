@@ -11,6 +11,8 @@
 #include "Sound/SoundBase.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
 
 APrivateJet::APrivateJet()
@@ -37,19 +39,28 @@ APrivateJet::APrivateJet()
 
 	JetBannerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("JetBannerMesh"));
 	JetBannerMesh->SetupAttachment(MovingJetCarriage);
-	JetBannerMesh->SetRelativeLocation(FVector(-950.0f, 0.0f, 0.0f));
-	JetBannerMesh->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
-	JetBannerMesh->SetRelativeScale3D(FVector(2.2f, 8.0f, 1.0f));
+	// Towed streamer: a thin vertical slab trailing behind the jet, seen side-on from the flight band
+	JetBannerMesh->SetRelativeLocation(FVector(-3600.0f, 0.0f, 0.0f));
+	JetBannerMesh->SetRelativeScale3D(FVector(55.0f, 0.05f, 3.5f));
 	JetBannerMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	BannerTextRender = CreateDefaultSubobject<UTextRenderComponent>(TEXT("BannerTextRender"));
 	BannerTextRender->SetupAttachment(MovingJetCarriage);
-	BannerTextRender->SetRelativeLocation(FVector(-950.0f, 30.0f, -40.0f));
+	BannerTextRender->SetRelativeLocation(FVector(-3600.0f, 10.0f, 0.0f));
 	BannerTextRender->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
 	BannerTextRender->SetHorizontalAlignment(EHTA_Center);
 	BannerTextRender->SetVerticalAlignment(EVRTA_TextCenter);
-	BannerTextRender->SetWorldSize(72.0f);
-	BannerTextRender->SetTextRenderColor(FColor::Yellow);
+	BannerTextRender->SetWorldSize(220.0f);
+	BannerTextRender->SetTextRenderColor(FColor(255, 214, 40));
+
+	BannerTextRenderBack = CreateDefaultSubobject<UTextRenderComponent>(TEXT("BannerTextRenderBack"));
+	BannerTextRenderBack->SetupAttachment(MovingJetCarriage);
+	BannerTextRenderBack->SetRelativeLocation(FVector(-3600.0f, -10.0f, 0.0f));
+	BannerTextRenderBack->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+	BannerTextRenderBack->SetHorizontalAlignment(EHTA_Center);
+	BannerTextRenderBack->SetVerticalAlignment(EVRTA_TextCenter);
+	BannerTextRenderBack->SetWorldSize(220.0f);
+	BannerTextRenderBack->SetTextRenderColor(FColor(255, 214, 40));
 
 	// Wake turbulence box spans from jet altitude (8400u) down to chimney top height (1400u) relative to the jet
 	WakeTurbulenceBox = CreateDefaultSubobject<UBoxComponent>(TEXT("WakeTurbulenceBox"));
@@ -72,10 +83,17 @@ APrivateJet::APrivateJet()
 		JetBodyMesh->SetStaticMesh(JetMeshAsset.Object);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshAsset(TEXT("/Engine/BasicShapes/Plane.Plane"));
-	if (PlaneMeshAsset.Succeeded())
+	// A thin cube rather than a plane: planes are one-sided, the banner must read from both sides
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BannerMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (BannerMeshAsset.Succeeded())
 	{
-		JetBannerMesh->SetStaticMesh(PlaneMeshAsset.Object);
+		JetBannerMesh->SetStaticMesh(BannerMeshAsset.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> SmokePuffAsset(TEXT("/Game/Game/VFX/NS_SkySmog.NS_SkySmog"));
+	if (SmokePuffAsset.Succeeded())
+	{
+		SmokePuffSystem = SmokePuffAsset.Object;
 	}
 
 	JetRoarAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("JetRoarAudio"));
@@ -98,8 +116,8 @@ void APrivateJet::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Stratospheric minimum altitude safety enforcement (JetAltitude, above the 7800u glider ceiling)
-	if (GetActorLocation().Z < JetAltitude)
+	// The pass flies at JetAltitude, mid flight band, wherever the actor was placed vertically
+	if (!FMath::IsNearlyEqual(GetActorLocation().Z, JetAltitude))
 	{
 		FVector CorrectedLoc = GetActorLocation();
 		CorrectedLoc.Z = JetAltitude;
@@ -131,6 +149,9 @@ bool APrivateJet::RequestFlybyPass()
 void APrivateJet::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Puffs outlive the pass, so they expire every tick, flying or idle
+	UpdateSmokeTrail(DeltaTime);
 
 	if (!bIsApproaching && !bIsFlyingPass)
 	{
@@ -164,6 +185,7 @@ void APrivateJet::Tick(float DeltaTime)
 		const FRotator NewWorldRot = FlightSpline->GetRotationAtDistanceAlongSpline(CurrentSplineDistance, ESplineCoordinateSpace::World);
 
 		MovingJetCarriage->SetWorldLocationAndRotation(NewWorldLoc, NewWorldRot);
+		DistanceSinceLastPuff += JetFlightSpeed * DeltaTime;
 
 		if (CurrentSplineDistance >= TotalLength)
 		{
@@ -187,10 +209,7 @@ bool APrivateJet::IsLethalCrashHazard_Implementation(const UPrimitiveComponent* 
 
 float APrivateJet::GetWakeDownwashSpeed_Implementation(const UPrimitiveComponent* HazardComponent) const
 {
-	if (bIsFlyingPass && HazardComponent == WakeTurbulenceBox)
-	{
-		return WakeDownwashSpeed;
-	}
+	// The jet no longer pushes the glider down; its impact is the smoke trail (WakeTurbulenceBox stays disabled)
 	return 0.0f;
 }
 
@@ -206,6 +225,10 @@ void APrivateJet::BeginApproachWarning()
 	if (BannerTextRender)
 	{
 		BannerTextRender->SetText(ActiveSlogan);
+	}
+	if (BannerTextRenderBack)
+	{
+		BannerTextRenderBack->SetText(ActiveSlogan);
 	}
 
 	OnJetApproachStateChanged.Broadcast(true, ActiveSlogan);
@@ -228,11 +251,6 @@ void APrivateJet::StartFlybyPass()
 				FlightSpline->GetRotationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World));
 		}
 		MovingJetCarriage->SetVisibility(true, true);
-	}
-
-	if (WakeTurbulenceBox)
-	{
-		WakeTurbulenceBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	}
 
 	if (JetWakeVFX)
@@ -269,4 +287,80 @@ void APrivateJet::FinishFlybyPass()
 	}
 
 	OnJetApproachStateChanged.Broadcast(false, FText::GetEmpty());
+}
+
+bool APrivateJet::GetRepelSphere(FVector& OutCenter, float& OutHardRadius, float& OutSoftRadius) const
+{
+	if (!bIsFlyingPass || !MovingJetCarriage)
+	{
+		return false;
+	}
+
+	OutCenter = MovingJetCarriage->GetComponentLocation();
+	OutHardRadius = RepelHardRadius;
+	OutSoftRadius = FMath::Max(RepelSoftRadius, RepelHardRadius + 1.0f);
+	return true;
+}
+
+bool APrivateJet::IsShadedBySmoke(const FVector& Location) const
+{
+	for (const FSmokePuff& Puff : SmokePuffs)
+	{
+		if (Location.Z < Puff.Center.Z && FVector::DistSquared2D(Location, Puff.Center) < FMath::Square(SmokePuffRadius))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void APrivateJet::UpdateSmokeTrail(float DeltaTime)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+
+	// Expired puffs stop emitting and fade out on their own (auto-destroyed once the last particle dies)
+	for (int32 i = SmokePuffs.Num() - 1; i >= 0; --i)
+	{
+		if (Now >= SmokePuffs[i].ExpireTime)
+		{
+			if (UNiagaraComponent* VFX = SmokePuffs[i].VFX.Get())
+			{
+				VFX->Deactivate();
+			}
+			SmokePuffs.RemoveAtSwap(i);
+		}
+	}
+
+	if (!bIsFlyingPass || !MovingJetCarriage || !SmokePuffSystem || DistanceSinceLastPuff < SmokePuffSpacing)
+	{
+		return;
+	}
+	DistanceSinceLastPuff = 0.0f;
+
+	const FVector JetLocation = MovingJetCarriage->GetComponentLocation();
+	if (SmokeArea.bIsValid && !SmokeArea.IsInside(FVector2D(JetLocation)))
+	{
+		return;
+	}
+
+	FSmokePuff Puff;
+	Puff.Center = JetLocation + FVector(0.0f, 0.0f, SmokePuffOffsetZ);
+	Puff.ExpireTime = Now + FMath::FRandRange(SmokePuffLifetimeRange.X, SmokePuffLifetimeRange.Y);
+
+	// NS_SkySmog is the stacks' sky canopy cloud: SpreadRadius / SpawnRate / SizeScale user parameters
+	UNiagaraComponent* VFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, SmokePuffSystem, Puff.Center, FRotator::ZeroRotator,
+		FVector::OneVector, true, true, ENCPoolMethod::None);
+	if (VFX)
+	{
+		VFX->SetVariableFloat(TEXT("SpreadRadius"), SmokePuffRadius);
+		VFX->SetVariableFloat(TEXT("SpawnRate"), 10.0f);
+		VFX->SetVariableFloat(TEXT("SizeScale"), 1.2f);
+		Puff.VFX = VFX;
+	}
+	SmokePuffs.Add(Puff);
 }

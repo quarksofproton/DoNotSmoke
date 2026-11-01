@@ -92,6 +92,20 @@ ASmokestack::ASmokestack()
 	LethalPlumeCapsule->SetHiddenInGame(true);
 	LethalPlumeCapsule->ShapeColor = FColor::Red;
 
+	auto InitConeSegment = [this](const TCHAR* Name) -> UCapsuleComponent*
+	{
+		UCapsuleComponent* Segment = CreateDefaultSubobject<UCapsuleComponent>(Name);
+		Segment->SetupAttachment(RimTargetSphere);
+		Segment->SetCollisionResponseToAllChannels(ECR_Overlap);
+		Segment->SetGenerateOverlapEvents(true);
+		Segment->SetHiddenInGame(true);
+		Segment->ShapeColor = FColor::Red;
+		return Segment;
+	};
+	LethalPlumeCone_1 = InitConeSegment(TEXT("LethalPlumeCone_1"));
+	LethalPlumeCone_2 = InitConeSegment(TEXT("LethalPlumeCone_2"));
+	LethalPlumeCone_3 = InitConeSegment(TEXT("LethalPlumeCone_3"));
+
 	OverheadSmogCanopySphere = CreateDefaultSubobject<USphereComponent>(TEXT("OverheadSmogCanopySphere"));
 	OverheadSmogCanopySphere->SetupAttachment(SceneRoot);
 	OverheadSmogCanopySphere->SetWorldLocation(FVector(0.0f, 0.0f, CanopyWorldAltitude));
@@ -269,6 +283,9 @@ void ASmokestack::BeginPlay()
 	{
 		if (Sparkle)
 		{
+			// The stack actor is scaled per archetype; the glint keeps its own size instead of stretching with it
+			Sparkle->SetUsingAbsoluteScale(true);
+			Sparkle->SetWorldScale3D(FVector::OneVector);
 			Sparkle->SetVariableFloat(TEXT("SpreadRadius"), RimSphereRadius * SealSparkleSpreadFraction);
 			Sparkle->SetVariableFloat(TEXT("SpawnRate"), SealSparkleSpawnRate);
 			Sparkle->SetVariableFloat(TEXT("SizeScale"), SealSparkleSizeScale);
@@ -482,7 +499,8 @@ bool ASmokestack::IsLethalCrashHazard_Implementation(const UPrimitiveComponent* 
 		return true;
 	}
 
-	if (HazardComponent == LethalPlumeCapsule)
+	if (HazardComponent && (HazardComponent == LethalPlumeCapsule || HazardComponent == LethalPlumeCone_1
+		|| HazardComponent == LethalPlumeCone_2 || HazardComponent == LethalPlumeCone_3))
 	{
 		return (SmokestackType == ESmokestackType::HeavyLethal) && !bIsSealed;
 	}
@@ -674,13 +692,20 @@ void ASmokestack::RefreshArchetypeCollisionState()
 		}
 	}
 
-	if (LethalPlumeCapsule)
+	// The plume (2 x LethalPlumeHalfHeight tall above the rim) is split into stacked segments that widen towards the top
+	UCapsuleComponent* PlumeSegments[4] = { LethalPlumeCapsule, LethalPlumeCone_1, LethalPlumeCone_2, LethalPlumeCone_3 };
+	const bool bEnableLethalPlume = (SmokestackType == ESmokestackType::HeavyLethal) && !bIsSealed;
+	const float SegmentHalfHeight = LethalPlumeHalfHeight / UE_ARRAY_COUNT(PlumeSegments);
+	for (int32 i = 0; i < UE_ARRAY_COUNT(PlumeSegments); ++i)
 	{
-		LethalPlumeCapsule->SetCapsuleSize(LethalPlumeRadius, LethalPlumeHalfHeight);
-		LethalPlumeCapsule->SetRelativeLocation(FVector(0.0f, 0.0f, LethalPlumeHalfHeight));
-		const bool bEnableLethalPlume = (SmokestackType == ESmokestackType::HeavyLethal) && !bIsSealed;
-		LethalPlumeCapsule->SetCollisionEnabled(bEnableLethalPlume ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
-		LethalPlumeCapsule->SetVisibility(bEnableLethalPlume);
+		if (UCapsuleComponent* Segment = PlumeSegments[i])
+		{
+			const float Radius = FMath::Lerp(LethalPlumeRadius, LethalPlumeTopRadius, (i + 0.5f) / UE_ARRAY_COUNT(PlumeSegments));
+			Segment->SetCapsuleSize(Radius, FMath::Max(SegmentHalfHeight, Radius));
+			Segment->SetRelativeLocation(FVector(0.0f, 0.0f, SegmentHalfHeight * (2 * i + 1)));
+			Segment->SetCollisionEnabled(bEnableLethalPlume ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+			Segment->SetVisibility(bEnableLethalPlume);
+		}
 	}
 
 	if (OverheadSmogCanopySphere)

@@ -67,6 +67,14 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UImage> AltimeterArrow;
 
+	/** Live altitude readout in the small window at the top of the ruler art. */
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UTextBlock> AltitudeText;
+
+	/** Sun-and-bolt icon above the battery arc. */
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
+	TObjectPtr<UImage> BatteryIcon;
+
 	/** Left slot of the top bar: open stacks, sun pockets and live star rating. */
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UTextBlock> StacksAndCO2Text;
@@ -127,6 +135,9 @@ protected:
 	TObjectPtr<UTexture2D> ArcLowTexture;
 
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
+	TObjectPtr<UTexture2D> SunBoltTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
 	TObjectPtr<UTexture2D> AltimeterRulerTexture;
 
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
@@ -147,9 +158,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
 	TObjectPtr<UTexture2D> HazardFrameTexture;
 
-	/** How long the VIP jet warning stays on screen after a jet is dispatched. */
+	/** How long the VIP jet warning blinks after a jet is dispatched, and how many times. */
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
 	float JetWarningDisplaySeconds = 3.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
+	int32 JetWarningBlinkCount = 3;
 
 	/** Battery percentage below which the arc turns red. */
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
@@ -178,6 +192,7 @@ private:
 	/** Last text pushed to StacksAndCO2Text, so SetText only runs when the string changes. */
 	FString LastStatusText;
 	FString LastCarbonText;
+	int32 LastAltitudeShown = INDEX_NONE;
 	bool bWasJetAlertActive = false;
 	float JetWarningRemaining = 0.0f;
 
@@ -312,6 +327,13 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
 	TObjectPtr<UTextBlock> AccuracyText;
 
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UButton> RestartButton;
+
+	/** Placeholder until L2 exists: shown but does nothing yet. */
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Summary")
+	TObjectPtr<UButton> NextLevelButton;
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
@@ -364,6 +386,9 @@ private:
 
 	void BuildFallbackWidgetTree();
 	void BurstConfetti();
+
+	UFUNCTION()
+	void HandleRestartClicked();
 	void TickConfetti(float DeltaTime);
 };
 
@@ -397,6 +422,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> PlayButton;
 
+	/** Small square in the bottom-right corner cycling EN / TR / NL. */
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> LanguageButton;
 
@@ -487,7 +513,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DoNotSmoke|Score")
 	float GetElapsedLevelSeconds() const { return ElapsedLevelSeconds; }
 
-	/** Returns current open sunlight corridor ratio (0.0 = sky choked, 1.0 = clear sky). */
+	/** Share of the play area whose sky is open right now (no stack canopy or jet smoke overhead): 0.0 = choked, 1.0 = clear. */
 	UFUNCTION(BlueprintPure, Category = "DoNotSmoke|Environment")
 	float GetSunPocketOpenRatio() const { return SunPocketOpenRatio; }
 
@@ -514,6 +540,9 @@ public:
 	/** Console: finishes the level with the given star rating so the summary screen can be tested. */
 	UFUNCTION(Exec, Category = "DoNotSmoke|Debug")
 	void DebugForceLevelComplete(int32 Stars = 3);
+
+	/** Cheat (type C, O, P in flight): ends the level at once so the newspaper can be checked; the numbers are not meaningful. */
+	void CheatFinishLevel();
 
 	/** Console: fully seals the smokestack nearest to the glider (tests sun pockets and beams). */
 	UFUNCTION(Exec, Category = "DoNotSmoke|Debug")
@@ -671,6 +700,27 @@ private:
 
 	/** Freezes the level behind the title screen; deferred a moment after BeginPlay so the camera arm can settle first. */
 	void FreezeForPreFlight();
+
+	/** Actors with this tag (the Border1-4 cubes) mark the play area; they are hidden at runtime. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Bounds", meta = (AllowPrivateAccess = "true"))
+	FName LevelBorderTag = TEXT("LevelBorder");
+
+	/** The invisible wall stands this far outside the border cubes. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Bounds", meta = (AllowPrivateAccess = "true"))
+	float FlightWallMargin = 2500.0f;
+
+	void ApplyLevelBorders();
+
+	/** Play area from the border cubes (without the wall margin); invalid if the level has no border cubes. */
+	FBox2D PlayArea = FBox2D(ForceInit);
+
+	/** Letters typed so far towards the "COP" cheat, and when the last one was typed. */
+	FString CheatBuffer;
+	float LastCheatKeyTime = 0.0f;
+	void HandleCheatKey(TCHAR Letter);
+	void HandleCheatKeyC() { HandleCheatKey(TEXT('C')); }
+	void HandleCheatKeyO() { HandleCheatKey(TEXT('O')); }
+	void HandleCheatKeyP() { HandleCheatKey(TEXT('P')); }
 
 	/** False until the countdown ends: no carbon, time or jets accumulate while the title screen or countdown is up. */
 	bool bFlightStarted = false;

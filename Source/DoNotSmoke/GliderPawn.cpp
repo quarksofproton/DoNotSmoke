@@ -2,6 +2,8 @@
 
 #include "GliderPawn.h"
 #include "CarbonSealProjectile.h"
+#include "PrivateJet.h"
+#include "EngineUtils.h"
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/InputComponent.h"
@@ -161,6 +163,12 @@ void AGliderPawn::BeginPlay()
 		for (AActor* SealableActor : SealableActors)
 		{
 			CachedSealableActors.Add(SealableActor);
+		}
+
+		CachedJets.Reset();
+		for (TActorIterator<APrivateJet> It(World); It; ++It)
+		{
+			CachedJets.Add(*It);
 		}
 
 		World->GetTimerManager().SetTimer(
@@ -441,6 +449,41 @@ void AGliderPawn::UpdateFlightKinematics(float DeltaTime)
 		ActiveDownwashSpeed = 0.0f;
 	}
 
+	// Jet repel field: a growing outward push inside the soft radius, and a hard keep-out sphere around the fuselage
+	for (const TWeakObjectPtr<APrivateJet>& WeakJet : CachedJets)
+	{
+		FVector JetCenter;
+		float HardRadius = 0.0f;
+		float SoftRadius = 0.0f;
+		const APrivateJet* Jet = WeakJet.Get();
+		if (!Jet || !Jet->GetRepelSphere(JetCenter, HardRadius, SoftRadius))
+		{
+			continue;
+		}
+
+		const FVector Away = NewLocation - JetCenter;
+		const float Distance = Away.Size();
+		if (Distance >= SoftRadius)
+		{
+			continue;
+		}
+
+		const FVector AwayDir = Distance > KINDA_SMALL_NUMBER ? Away / Distance : FVector::UpVector;
+		const float PushAlpha = 1.0f - FMath::GetRangePct(HardRadius, SoftRadius, Distance);
+		NewLocation += AwayDir * JetRepelPushSpeed * FMath::Clamp(PushAlpha, 0.0f, 1.0f) * DeltaTime;
+		if ((NewLocation - JetCenter).SizeSquared() < FMath::Square(HardRadius))
+		{
+			NewLocation = JetCenter + AwayDir * HardRadius;
+		}
+	}
+
+	// Soft wall: clamp onto the edge of the flight box; the glider slides along it until the player turns back
+	if (FlightBounds.bIsValid)
+	{
+		NewLocation.X = FMath::Clamp(NewLocation.X, FlightBounds.Min.X, FlightBounds.Max.X);
+		NewLocation.Y = FMath::Clamp(NewLocation.Y, FlightBounds.Min.Y, FlightBounds.Max.Y);
+	}
+
 	FHitResult MoveHit;
 	SetActorLocation(NewLocation, true, &MoveHit);
 	// The sweep's blocking hit is handled explicitly here as well as via OnComponentHit, since a swept
@@ -550,7 +593,18 @@ void AGliderPawn::PerformSunlightTrace()
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SunlightTrace), false, this);
 
 	FHitResult Hit;
-	const bool bBlocked = World->LineTraceSingleByChannel(Hit, StartLoc, EndLoc, ECC_Visibility, QueryParams);
+	bool bBlocked = World->LineTraceSingleByChannel(Hit, StartLoc, EndLoc, ECC_Visibility, QueryParams);
+
+	// A VIP jet's smoke puffs above the glider also cut the sunlight
+	for (const TWeakObjectPtr<APrivateJet>& WeakJet : CachedJets)
+	{
+		if (bBlocked)
+		{
+			break;
+		}
+		const APrivateJet* Jet = WeakJet.Get();
+		bBlocked = Jet && Jet->IsShadedBySmoke(StartLoc);
+	}
 	bIsInSunlight = !bBlocked;
 }
 
@@ -809,4 +863,18 @@ void AGliderPawn::SetPullUpWarningActive(bool bActive)
 		}
 	}
 	OnPullUpWarningChanged.Broadcast(bIsPullUpWarningActive);
+}
+
+void AGliderPawn::SetFlightBounds(const FBox2D& Bounds)
+{
+	FlightBounds = Bounds;
+}
+
+void AGliderPawn::SetMotionBlurSuppressed(bool bSuppressed)
+{
+	if (FollowCamera)
+	{
+		FollowCamera->PostProcessSettings.bOverride_MotionBlurAmount = bSuppressed;
+		FollowCamera->PostProcessSettings.MotionBlurAmount = 0.0f;
+	}
 }

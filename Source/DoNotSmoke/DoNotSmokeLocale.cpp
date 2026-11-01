@@ -16,10 +16,10 @@ namespace
 	const FLocEntry Entries[] =
 	{
 		// Main menu
-		{ TEXT("MenuTagline"), { TEXT("Renew the sky, one chimney at a time."), TEXT("Gökyüzünü yenile, baca baca."), TEXT("Vernieuw de lucht, schoorsteen voor schoorsteen.") } },
+		{ TEXT("MenuTagline"), { TEXT("Renew the sky, one chimney at a time."), TEXT("Dumanı kes, güneşi geri getir."), TEXT("Vernieuw de lucht, schoorsteen voor schoorsteen.") } },
 		{ TEXT("MenuPlay"), { TEXT("PLAY"), TEXT("OYNA"), TEXT("SPELEN") } },
 		{ TEXT("MenuQuit"), { TEXT("QUIT"), TEXT("ÇIKIŞ"), TEXT("AFSLUITEN") } },
-		{ TEXT("MenuLanguage"), { TEXT("LANGUAGE: ENGLISH"), TEXT("DİL: TÜRKÇE"), TEXT("TAAL: NEDERLANDS") } },
+		{ TEXT("MenuLanguage"), { TEXT("EN"), TEXT("TR"), TEXT("NL") } },
 
 		// Countdown
 		{ TEXT("CountdownGo"), { TEXT("RENEW IT!"), TEXT("YENİLE!"), TEXT("VERNIEUW HET!") } },
@@ -54,6 +54,7 @@ namespace
 		{ TEXT("PaperMasthead"), { TEXT("THE DAILY SMOG"), TEXT("GÜNLÜK DUMAN"), TEXT("DE DAGELIJKSE SMOG") } },
 		{ TEXT("PaperEdition"), { TEXT("COP31 CLIMATE SUMMIT  ·  SPECIAL EDITION"), TEXT("COP31 İKLİM ZİRVESİ  ·  ÖZEL BASKI"), TEXT("COP31 KLIMAATTOP  ·  SPECIALE EDITIE") } },
 		{ TEXT("PaperAudit"), { TEXT("AUDIT"), TEXT("DENETİM"), TEXT("AUDIT") } },
+		{ TEXT("NextLevel"), { TEXT("NEXT LEVEL"), TEXT("SONRAKİ BÖLÜM"), TEXT("VOLGEND LEVEL") } },
 		{ TEXT("PaperFooter"), { TEXT("[R]  RESTART SECTOR"), TEXT("[R]  BÖLGEYİ BAŞTAN OYNA"), TEXT("[R]  SECTOR OPNIEUW") } },
 		{ TEXT("PaperCarbon"), { TEXT("CO2  {0} kg  /  target {1} kg"), TEXT("CO2  {0} kg  /  hedef {1} kg"), TEXT("CO2  {0} kg  /  doel {1} kg") } },
 		{ TEXT("PaperTime"), { TEXT("TIME  {0} s"), TEXT("SÜRE  {0} sn"), TEXT("TIJD  {0} s") } },

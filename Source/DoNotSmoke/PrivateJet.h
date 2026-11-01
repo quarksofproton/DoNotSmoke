@@ -17,9 +17,10 @@ class UAudioComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnJetApproachStateChangedSignature, bool, bIsApproachingOrPassing, FText, ActiveBannerSlogan);
 
 /**
- * Stratospheric VIP Private Jet (8400u altitude) flying along a spline path.
- * Broadcasts HUD approach warnings (!), displays rotating satirical COP31 greenwashing banners,
- * and trails a non-lethal WakeTurbulenceBox causing downwash altitude loss via IBPI_FlightHazard.
+ * VIP Private Jet crossing the middle of the flight band (4500u) along a spline path.
+ * Broadcasts HUD approach warnings (!), tows a two-sided satirical COP31 greenwashing banner,
+ * pushes the glider away before it can get close, and trails smoke puffs over the play area that
+ * shade everything below them from the sun for 5-10 s.
  */
 UCLASS(Blueprintable)
 class DONOTSMOKE_API APrivateJet : public AActor, public IBPI_FlightHazard
@@ -45,6 +46,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "PrivateJet|State")
 	FText GetCurrentBannerSlogan() const;
+
+	/** While a pass is flying: the jet's position and its repel radii (hard keep-out and soft push start). */
+	bool GetRepelSphere(FVector& OutCenter, float& OutHardRadius, float& OutSoftRadius) const;
+
+	/** True if a live smoke puff from this jet hangs above Location (within its radius and higher up). */
+	bool IsShadedBySmoke(const FVector& Location) const;
+
+	/** Puffs are only dropped inside this XY box (the play area), so the long route does not spawn smoke far away. */
+	void SetSmokeArea(const FBox2D& Area) { SmokeArea = Area; }
 
 	/** Starts the approach warning and pass now if the jet is idle; returns false if a pass is already running. */
 	UFUNCTION(BlueprintCallable, Category = "PrivateJet|State")
@@ -89,7 +99,11 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UTextRenderComponent> BannerTextRender;
 
-	/** Trailing wake turbulence volume spanning 8400u (jet altitude) down to 1400u (chimney top height) to catch gliders in the flight band. */
+	/** Mirror of BannerTextRender on the other face of the banner, so the slogan reads from both sides. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UTextRenderComponent> BannerTextRenderBack;
+
+	/** Former downwash volume; kept on the actor but never enabled since the smoke trail replaced the downwash. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBoxComponent> WakeTurbulenceBox;
 
@@ -101,7 +115,7 @@ private:
 	// ==========================================
 	/** World Z altitude (units) the jet is snapped to on BeginPlay if it was placed below it. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
-	float JetAltitude = 8400.0f;
+	float JetAltitude = 4500.0f;
 
 	/** Wake box location relative to the jet carriage (centre sits 1400u below jet altitude). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
@@ -122,10 +136,6 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	float ApproachWarningLeadSeconds = 2.5f;
 
-	/** Downward velocity (units/sec) applied to the Glider when caught inside the trailing wake turbulence, down to the glider's WakeTargetFloorAltitude (1350u). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
-	float WakeDownwashSpeed = 2400.0f;
-
 	/** Jet engine fly-by roar (SFX_Jet_Roar), played from the moving carriage at the start of each pass. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UAudioComponent> JetRoarAudio;
@@ -134,12 +144,48 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	bool bAutoSchedulePasses = true;
 
+	/** Glider keep-out: it can never get closer than RepelHardRadius and is pushed away from RepelSoftRadius inwards. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Repel", meta = (AllowPrivateAccess = "true"))
+	float RepelHardRadius = 3500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Repel", meta = (AllowPrivateAccess = "true"))
+	float RepelSoftRadius = 6500.0f;
+
+	/** Smoke trail: one NS_SkySmog puff every SmokePuffSpacing units of flight, each lasting a random time in SmokePuffLifetimeRange. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "PrivateJet|Smoke", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UNiagaraSystem> SmokePuffSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Smoke", meta = (AllowPrivateAccess = "true"))
+	float SmokePuffSpacing = 1500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Smoke", meta = (AllowPrivateAccess = "true"))
+	float SmokePuffRadius = 2200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Smoke", meta = (AllowPrivateAccess = "true"))
+	FVector2D SmokePuffLifetimeRange = FVector2D(5.0f, 10.0f);
+
+	/** Puffs sit a little above the jet so the banner and fuselage stay visible below the trail. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Smoke", meta = (AllowPrivateAccess = "true"))
+	float SmokePuffOffsetZ = 400.0f;
+
 	// ==========================================
 	// INTERNAL STATE
 	// ==========================================
 	float CurrentSplineDistance = 0.0f;
 	float WaitTimer = 0.0f;
 	int32 CurrentSloganIndex = 0;
+
+	struct FSmokePuff
+	{
+		TWeakObjectPtr<class UNiagaraComponent> VFX;
+		FVector Center = FVector::ZeroVector;
+		float ExpireTime = 0.0f;
+	};
+	TArray<FSmokePuff> SmokePuffs;
+	float DistanceSinceLastPuff = 0.0f;
+	FBox2D SmokeArea = FBox2D(ForceInit);
+
+	void UpdateSmokeTrail(float DeltaTime);
 	bool bIsApproaching = false;
 	bool bIsFlyingPass = false;
 

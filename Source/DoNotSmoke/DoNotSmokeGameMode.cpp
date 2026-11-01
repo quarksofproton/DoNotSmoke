@@ -146,11 +146,14 @@ namespace DoNotSmokeUI
 // Layout reference: 1920x1080, scaled by the project DPI curve
 namespace HUDLayout
 {
-	static const FVector2D CrosshairSize(200.0f, 200.0f);
-	static const FVector2D CooldownRingSize(120.0f, 120.0f);
+	static const FVector2D CrosshairSize(100.0f, 100.0f);
+	static const FVector2D CooldownRingSize(60.0f, 60.0f);
 
-	static const FVector2D BatterySize(280.0f, 280.0f);
-	static const FVector2D BatteryPosition(-80.0f, 0.0f);
+	static const FVector2D BatterySize(340.0f, 340.0f);
+	static const FVector2D BatteryPosition(-97.0f, 0.0f);
+	// Sun-bolt icon centred over the arc's top cap (cap centre at U 0.57, top edge at V 0.09 of the 800x800 art)
+	static const FVector2D BatteryIconSize(84.0f, 84.0f);
+	static const FVector2D BatteryIconPosition(BatteryPosition.X + BatterySize.X * 0.57f, BatterySize.Y * (0.09f - 0.5f) - 44.0f);
 	// Vertical extent of the coloured arc inside its 800x800 texture
 	static constexpr float BatteryArcTopV = 132.0f / 800.0f;
 	static constexpr float BatteryArcBottomV = 668.0f / 800.0f;
@@ -160,6 +163,8 @@ namespace HUDLayout
 	static const FVector2D ArrowSize(44.0f, 44.0f);
 	// Horizontal position of the tick column inside the ruler texture
 	static constexpr float RulerTickU = 0.75f;
+	// Centre of the small dark window at the top of the 400x2200 ruler art, used for the altitude readout
+	static constexpr float RulerWindowV = 0.051f;
 }
 
 UDoNotSmokeFlightHUDWidget::UDoNotSmokeFlightHUDWidget(const FObjectInitializer& ObjectInitializer)
@@ -175,6 +180,7 @@ UDoNotSmokeFlightHUDWidget::UDoNotSmokeFlightHUDWidget(const FObjectInitializer&
 	ArcChargeTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArcGreen.T_UI_ArcGreen"));
 	ArcBoostTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArcBlue.T_UI_ArcBlue"));
 	ArcLowTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArcRed.T_UI_ArcRed"));
+	SunBoltTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_SunBolt.T_UI_SunBolt"));
 	AltimeterRulerTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_GaugeAltitudeRuler.T_UI_GaugeAltitudeRuler"));
 	AltimeterArrowTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_ArrowLeft.T_UI_ArrowLeft"));
 	TopBarTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_HudBar.T_UI_HudBar"));
@@ -238,10 +244,14 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 	// 2. Left: solar battery arc (frame + masked fill share the same box so the art lines up)
 	BatteryGaugeFrame = AddImage(WidgetTree, RootCanvas, TEXT("BatteryGaugeFrame"), ArcGaugeTexture, LeftCenter, FVector2D(0.0f, 0.5f), HUDLayout::BatteryPosition, HUDLayout::BatterySize);
 	BatteryFill = AddImage(WidgetTree, RootCanvas, TEXT("BatteryFill"), ArcChargeTexture, LeftCenter, FVector2D(0.0f, 0.5f), HUDLayout::BatteryPosition, HUDLayout::BatterySize);
+	BatteryIcon = AddImage(WidgetTree, RootCanvas, TEXT("BatteryIcon"), SunBoltTexture, LeftCenter, Centered, HUDLayout::BatteryIconPosition, HUDLayout::BatteryIconSize);
 
 	// 3. Right: altimeter ruler + moving arrow
 	AltimeterRuler = AddImage(WidgetTree, RootCanvas, TEXT("AltimeterRuler"), AltimeterRulerTexture, RightCenter, FVector2D(1.0f, 0.5f), HUDLayout::RulerPosition, HUDLayout::RulerSize);
 	AltimeterArrow = AddImage(WidgetTree, RootCanvas, TEXT("AltimeterArrow"), AltimeterArrowTexture, RightCenter, FVector2D(0.0f, 0.5f), FVector2D::ZeroVector, HUDLayout::ArrowSize);
+	AltitudeText = MakeText(WidgetTree, TEXT("AltitudeText"), 12, FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
+	SetBold(AltitudeText);
+	AddText(RootCanvas, AltitudeText, RightCenter, FVector2D(HUDLayout::RulerPosition.X - HUDLayout::RulerSize.X * 0.5f, (HUDLayout::RulerWindowV - 0.5f) * HUDLayout::RulerSize.Y));
 
 	// 4. Center: cooldown ring stack + crosshair (repositioned every tick onto the projected aim point)
 	CooldownRingBase = AddImage(WidgetTree, RootCanvas, TEXT("CooldownRingBase"), RingDarkTexture, TopLeft, Centered, FVector2D(960.0f, 540.0f), HUDLayout::CooldownRingSize);
@@ -569,7 +579,7 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 			}
 		}
 
-		// Show the warning once, steadily, for a few seconds when a jet is dispatched (slogan stays on the jet's banner)
+		// Blink the warning JetWarningBlinkCount times when a jet is dispatched (slogan stays on the jet's banner)
 		const bool bJetAlert = GM->IsPrivateJetAlertActive();
 		if (bJetAlert && !bWasJetAlertActive)
 		{
@@ -578,7 +588,11 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 		bWasJetAlertActive = bJetAlert;
 		JetWarningRemaining = FMath::Max(0.0f, JetWarningRemaining - InDeltaTime);
 
-		const ESlateVisibility JetVis = JetWarningRemaining > 0.0f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		// Each blink is on for 60% of its period, then off
+		const float BlinkPeriod = JetWarningDisplaySeconds / FMath::Max(JetWarningBlinkCount, 1);
+		const float JetWarningAge = JetWarningDisplaySeconds - JetWarningRemaining;
+		const bool bJetBlinkOn = JetWarningRemaining > 0.0f && FMath::Fmod(JetWarningAge, BlinkPeriod) < BlinkPeriod * 0.6f;
+		const ESlateVisibility JetVis = bJetBlinkOn ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
 		if (JetWarningPanel) { JetWarningPanel->SetVisibility(JetVis); }
 		if (JetWarningText) { JetWarningText->SetVisibility(JetVis); }
 	}
@@ -663,6 +677,13 @@ void UDoNotSmokeFlightHUDWidget::UpdateBattery(AGliderPawn* Glider)
 
 void UDoNotSmokeFlightHUDWidget::UpdateAltimeter(AGliderPawn* Glider)
 {
+	const int32 Altitude = FMath::Max(0, FMath::RoundToInt(Glider->GetCurrentAltitude()));
+	if (AltitudeText && Altitude != LastAltitudeShown)
+	{
+		LastAltitudeShown = Altitude;
+		AltitudeText->SetText(FText::AsNumber(Altitude, &FNumberFormattingOptions::DefaultNoGrouping()));
+	}
+
 	UCanvasPanelSlot* ArrowSlot = AltimeterArrow ? Cast<UCanvasPanelSlot>(AltimeterArrow->Slot) : nullptr;
 	if (!ArrowSlot)
 	{
@@ -885,6 +906,19 @@ void UDoNotSmokeSummaryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	BuildFallbackWidgetTree();
+
+	if (RestartButton)
+	{
+		RestartButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeSummaryWidget::HandleRestartClicked);
+	}
+}
+
+void UDoNotSmokeSummaryWidget::HandleRestartClicked()
+{
+	if (ADoNotSmokeGameMode* GM = Cast<ADoNotSmokeGameMode>(UGameplayStatics::GetGameMode(this)))
+	{
+		GM->TriggerInstantRestart();
+	}
 }
 
 TSharedRef<SWidget> UDoNotSmokeSummaryWidget::RebuildWidget()
@@ -1021,7 +1055,26 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	Footer->SetText(DoNotSmokeLocale::Text(TEXT("PaperFooter")));
 	Place(PagePanel, MakeCentredBox(WidgetTree, TEXT("FooterBox"), Footer), 95.0f, 885.0f, 657.0f, 930.0f);
 
-	// 8. Confetti layer above the page, centred so piece positions are offsets from screen centre
+	// 8. Buttons beside the page: Restart, and Next Level (not wired until L2 exists)
+	auto AddSideButton = [&](const FName Name, const FLinearColor& Color, const TCHAR* LabelKey, float OffsetY) -> UButton*
+	{
+		UTextBlock* Label = MakeText(WidgetTree, NAME_None, 24, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
+		SetBold(Label);
+		Label->SetText(DoNotSmokeLocale::Text(LabelKey));
+		UButton* Button = MakeFlatButton(WidgetTree, Name, Color, Label);
+		if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(Button))
+		{
+			CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+			CanvasSlot->SetAlignment(FVector2D(0.0f, 0.5f));
+			CanvasSlot->SetPosition(FVector2D(PageSize.X * 0.5f + 48.0f, OffsetY));
+			CanvasSlot->SetSize(FVector2D(320.0f, 72.0f));
+		}
+		return Button;
+	};
+	RestartButton = AddSideButton(TEXT("SummaryRestartButton"), FLinearColor(0.16f, 0.55f, 0.28f, 0.95f), TEXT("CrashRestart"), -48.0f);
+	NextLevelButton = AddSideButton(TEXT("SummaryNextLevelButton"), FLinearColor(0.2f, 0.32f, 0.5f, 0.95f), TEXT("NextLevel"), 48.0f);
+
+	// 9. Confetti layer above the page, centred so piece positions are offsets from screen centre
 	ConfettiLayer = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("ConfettiLayer"));
 	ConfettiLayer->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(ConfettiLayer))
@@ -1294,8 +1347,19 @@ void UDoNotSmokeMainMenuWidget::BuildFallbackWidgetTree()
 	};
 
 	PlayButton = AddMenuButton(TEXT("PlayButton"), FLinearColor(0.16f, 0.55f, 0.28f, 0.95f), 0, PlayText);
-	LanguageButton = AddMenuButton(TEXT("LanguageButton"), FLinearColor(0.2f, 0.32f, 0.5f, 0.95f), 1, LanguageText);
-	QuitButton = AddMenuButton(TEXT("QuitButton"), FLinearColor(0.55f, 0.17f, 0.15f, 0.95f), 2, QuitText);
+	QuitButton = AddMenuButton(TEXT("QuitButton"), FLinearColor(0.55f, 0.17f, 0.15f, 0.95f), 1, QuitText);
+
+	// 5. Language square in the bottom-right corner: each press cycles EN -> TR -> NL
+	LanguageText = MakeText(WidgetTree, TEXT("LanguageText"), 30, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
+	SetBold(LanguageText);
+	LanguageButton = MakeFlatButton(WidgetTree, TEXT("LanguageButton"), FLinearColor(0.2f, 0.32f, 0.5f, 0.95f), LanguageText);
+	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(LanguageButton))
+	{
+		CanvasSlot->SetAnchors(FAnchors(1.0f, 1.0f));
+		CanvasSlot->SetAlignment(FVector2D(1.0f, 1.0f));
+		CanvasSlot->SetPosition(FVector2D(-32.0f, -32.0f));
+		CanvasSlot->SetSize(FVector2D(88.0f, 88.0f));
+	}
 
 	RefreshTexts();
 	bBuiltFallbackTree = true;
@@ -1422,6 +1486,7 @@ void ADoNotSmokeGameMode::BeginPlay()
 	}
 	JetDispatchTimer = FirstJetDelaySeconds;
 
+	ApplyLevelBorders();
 	BuildSunRainGrid();
 
 	// Bind to player GliderPawn events for shot accounting and Crash restart
@@ -1431,6 +1496,18 @@ void ADoNotSmokeGameMode::BeginPlay()
 		{
 			Glider->OnCarbonSealFired.AddDynamic(this, &ADoNotSmokeGameMode::NotifyCarbonSealFired);
 			Glider->OnGliderCrashed.AddDynamic(this, &ADoNotSmokeGameMode::HandleGliderCrashed);
+		}
+	}
+
+	// "COP" cheat: the GameMode listens to C, O, P itself so the glider stays free of debug input
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+	{
+		EnableInput(PC);
+		if (InputComponent)
+		{
+			InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ADoNotSmokeGameMode::HandleCheatKeyC);
+			InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ADoNotSmokeGameMode::HandleCheatKeyO);
+			InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ADoNotSmokeGameMode::HandleCheatKeyP);
 		}
 	}
 
@@ -1525,13 +1602,54 @@ void ADoNotSmokeGameMode::FreezeForPreFlight()
 {
 	if (!bFlightStarted)
 	{
+		if (AGliderPawn* Glider = Cast<AGliderPawn>(UGameplayStatics::GetPlayerPawn(GetWorld(), 0)))
+		{
+			Glider->SetMotionBlurSuppressed(true);
+		}
 		UGameplayStatics::SetGamePaused(GetWorld(), true);
+	}
+}
+
+void ADoNotSmokeGameMode::ApplyLevelBorders()
+{
+	FBox2D Area(ForceInit);
+	TArray<AActor*> Borders;
+	UGameplayStatics::GetAllActorsWithTag(GetWorld(), LevelBorderTag, Borders);
+	for (AActor* Border : Borders)
+	{
+		Area += FVector2D(Border->GetActorLocation());
+		Border->SetActorHiddenInGame(true);
+		Border->SetActorEnableCollision(false);
+	}
+
+	// Two or more corners are needed to span an area
+	if (Borders.Num() < 2 || !Area.bIsValid)
+	{
+		return;
+	}
+
+	PlayArea = Area;
+	const FBox2D WallArea = Area.ExpandBy(FlightWallMargin);
+	if (AGliderPawn* Glider = Cast<AGliderPawn>(UGameplayStatics::GetPlayerPawn(GetWorld(), 0)))
+	{
+		Glider->SetFlightBounds(WallArea);
+	}
+	for (const TWeakObjectPtr<APrivateJet>& WeakJet : TrackedJets)
+	{
+		if (APrivateJet* Jet = WeakJet.Get())
+		{
+			Jet->SetSmokeArea(WallArea);
+		}
 	}
 }
 
 void ADoNotSmokeGameMode::HandleCountdownFinished()
 {
 	bFlightStarted = true;
+	if (AGliderPawn* Glider = Cast<AGliderPawn>(UGameplayStatics::GetPlayerPawn(GetWorld(), 0)))
+	{
+		Glider->SetMotionBlurSuppressed(false);
+	}
 	GetWorldTimerManager().ClearTimer(PreFlightFreezeTimerHandle);
 	UGameplayStatics::SetGamePaused(GetWorld(), false);
 }
@@ -1563,7 +1681,6 @@ void ADoNotSmokeGameMode::Tick(float DeltaTime)
 
 		const float MaxChokeCarbon = FMath::Max(100.0f, TargetMinCarbonKg * SkyChokeCarbonMultiplier);
 		const float ChokeAlpha = FMath::Clamp(CumulativeCarbonKg / MaxChokeCarbon, 0.0f, 1.0f);
-		SunPocketOpenRatio = 1.0f - ChokeAlpha;
 		ApplySkyChoke(ChokeAlpha);
 
 		// Expand overhead smog canopies on remaining unsealed smokestacks
@@ -1673,7 +1790,10 @@ void ADoNotSmokeGameMode::UpdateSunRainCells()
 		return;
 	}
 
-	// Same test as the glider's sunlight trace: a cell rains light only while no smoke canopy is above it
+	// Same test as the glider's sunlight trace: a cell rains light only while no smoke canopy or jet smoke is above it.
+	// The open share of the cells inside the play area is the HUD's SUN percentage.
+	int32 PlayCells = 0;
+	int32 OpenPlayCells = 0;
 	for (UNiagaraComponent* Cell : SunRainCells)
 	{
 		if (!Cell)
@@ -1683,7 +1803,19 @@ void ADoNotSmokeGameMode::UpdateSunRainCells()
 
 		const FVector Centre = Cell->GetComponentLocation();
 		FHitResult Hit;
-		const bool bCovered = World->LineTraceSingleByChannel(Hit, FVector(Centre.X, Centre.Y, 3000.0f), FVector(Centre.X, Centre.Y, 8500.0f), ECC_Visibility);
+		bool bCovered = World->LineTraceSingleByChannel(Hit, FVector(Centre.X, Centre.Y, 3000.0f), FVector(Centre.X, Centre.Y, 8500.0f), ECC_Visibility);
+		for (const TWeakObjectPtr<APrivateJet>& WeakJet : TrackedJets)
+		{
+			const APrivateJet* Jet = WeakJet.Get();
+			bCovered = bCovered || (Jet && Jet->IsShadedBySmoke(FVector(Centre.X, Centre.Y, 3000.0f)));
+		}
+
+		if (!PlayArea.bIsValid || PlayArea.IsInside(FVector2D(Centre)))
+		{
+			++PlayCells;
+			OpenPlayCells += bCovered ? 0 : 1;
+		}
+
 		if (bCovered && Cell->IsActive())
 		{
 			Cell->Deactivate();
@@ -1692,6 +1824,11 @@ void ADoNotSmokeGameMode::UpdateSunRainCells()
 		{
 			Cell->Activate(true);
 		}
+	}
+
+	if (!bIsLevelCompleted && PlayCells > 0)
+	{
+		SunPocketOpenRatio = static_cast<float>(OpenPlayCells) / static_cast<float>(PlayCells);
 	}
 }
 
@@ -1794,6 +1931,41 @@ void ADoNotSmokeGameMode::DebugForceLevelComplete(int32 Stars)
 	TotalSmokestackCount = FMath::Max(TotalSmokestackCount, 1);
 	HandleSmokestackSealed(nullptr);
 #endif
+}
+
+void ADoNotSmokeGameMode::HandleCheatKey(TCHAR Letter)
+{
+	// The letters must come in order, each within 1.5 s of the previous one
+	const float Now = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0f;
+	if (Now - LastCheatKeyTime > 1.5f)
+	{
+		CheatBuffer.Reset();
+	}
+	LastCheatKeyTime = Now;
+
+	CheatBuffer.AppendChar(Letter);
+	if (!FString(TEXT("COP")).StartsWith(CheatBuffer))
+	{
+		CheatBuffer = (Letter == TEXT('C')) ? FString(TEXT("C")) : FString();
+	}
+	else if (CheatBuffer == TEXT("COP"))
+	{
+		CheatBuffer.Reset();
+		CheatFinishLevel();
+	}
+}
+
+void ADoNotSmokeGameMode::CheatFinishLevel()
+{
+	if (!bFlightStarted || bIsLevelCompleted || bHasGliderCrashed)
+	{
+		return;
+	}
+
+	// Treat the next seal as the last open mouth; the summary then shows whatever the run has so far
+	OpenSmokestackCount = 1;
+	TotalSmokestackCount = FMath::Max(TotalSmokestackCount, 1);
+	HandleSmokestackSealed(nullptr);
 }
 
 void ADoNotSmokeGameMode::TriggerInstantRestart()
