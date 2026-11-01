@@ -21,10 +21,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCarbonSealFiredSignature);
 
 /**
  * Kinematic Solar Glider Pawn featuring:
- * - Strict net-loss gliding (25:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
+ * - Strict net-loss gliding (15:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
  * - Decoupled SpringArm camera look & 135-degree cone clamped projectile aiming with ~10-degree magnetic assist
  * - Periodic 0.2s vertical sunlight LineTrace (binary 12.5%/s charge vs 0%/s under smog)
- * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 600u "PULL UP!" warning, 3900u Max Ceiling
+ * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 600u "PULL UP!" warning, 7800u Max Ceiling
  */
 UCLASS(Blueprintable)
 class DONOTSMOKE_API AGliderPawn : public APawn
@@ -179,7 +179,7 @@ private:
 	float RollYawRateDegPerSec = 125.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Flight", meta = (AllowPrivateAccess = "true"))
-	float GlideRatio = 25.0f;
+	float GlideRatio = 15.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Energy", meta = (AllowPrivateAccess = "true"))
 	float SolarChargeRatePerSec = 12.5f;
@@ -203,7 +203,7 @@ private:
 	float PullUpWarningAltitude = 600.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
-	float GliderMaxCeilingAltitude = 3900.0f;
+	float GliderMaxCeilingAltitude = 7800.0f;
 
 	/** Chimney rim altitude (1350u) to which Private Jet wake turbulence rapidly pushes the glider down. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
@@ -211,6 +211,10 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
 	float SunlightTraceInterval = 0.2f;
+
+	/** Upward sunlight trace length; must reach the smoke canopy (8500u) from the kill floor. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
+	float SunlightTraceLength = 10000.0f;
 
 	// ==========================================
 	// CAMERA & TARGETING PARAMETERS (GDD Sec 2.2 & 3.2)

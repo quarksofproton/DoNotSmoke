@@ -332,11 +332,11 @@ void AGliderPawn::UpdateFlightKinematics(float DeltaTime)
 
 	FVector VelocityVector = GetActorForwardVector() * CurrentSpeed;
 
-	// Baseline aerodynamic sink rate when in level flight without boost
-	if (!bIsSolarBoosting && SmoothedRot.Pitch <= 2.0f)
+	// Constant glide sink at every attitude unless boosting: the glider can never hold altitude on its own,
+	// so sunlight and Solar Boost are the only way to stay up (speed / GlideRatio, ~120 u/s at base speed)
+	if (!bIsSolarBoosting)
 	{
-		const float PassiveSinkRate = CurrentSpeed / FMath::Max(1.0f, GlideRatio);
-		VelocityVector.Z -= PassiveSinkRate * 0.25f;
+		VelocityVector.Z -= CurrentSpeed / FMath::Max(1.0f, GlideRatio);
 	}
 
 	// Apply wake turbulence downwash if active: rapidly forces glider down to chimney height (WakeTargetFloorAltitude)
@@ -369,7 +369,8 @@ void AGliderPawn::UpdateFlightKinematics(float DeltaTime)
 	}
 	else
 	{
-		MaxAllowedGlideZ -= (HorizontalStep / FMath::Max(1.0f, GlideRatio)) * 0.5f;
+		// The zoom-climb ceiling decays at the same glide ratio, so pulling up can never out-climb the sink
+		MaxAllowedGlideZ -= HorizontalStep / FMath::Max(1.0f, GlideRatio);
 	}
 
 	FVector NewLocation = GetActorLocation() + DeltaMove;
@@ -492,7 +493,7 @@ void AGliderPawn::PerformSunlightTrace()
 	}
 
 	// Vertical upward LineTrace checking against overhead SmogCanopy blockers
-	const FVector EndLoc = StartLoc + FVector(0.0f, 0.0f, 6000.0f);
+	const FVector EndLoc = StartLoc + FVector(0.0f, 0.0f, SunlightTraceLength);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SunlightTrace), false, this);
 
 	FHitResult Hit;

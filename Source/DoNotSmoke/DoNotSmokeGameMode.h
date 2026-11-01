@@ -168,7 +168,7 @@ private:
 	void UpdateBattery(AGliderPawn* Glider);
 	void UpdateAltimeter(AGliderPawn* Glider);
 
-	/** Maps altitude onto the ruler texture so its colour bands line up with the altitude stack (0 / 400 / 600 / 1400 / 3900u). */
+	/** Maps altitude onto the ruler texture so its colour bands line up with the altitude stack (0 / 400 / 600 / 1400 / 7800u). */
 	static float AltitudeToRulerV(float Altitude);
 };
 
@@ -433,6 +433,18 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
 	float SkyChokeCarbonMultiplier = 2.5f;
 
+	/** Sun intensity multiplier when the sky is fully choked (1.0 = clear sky). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Sky", meta = (AllowPrivateAccess = "true"))
+	float ChokedSunIntensityScale = 0.3f;
+
+	/** Density of the high-altitude smoke haze (height fog second layer) when the sky is fully choked. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Sky", meta = (AllowPrivateAccess = "true"))
+	float ChokedHighSmogDensity = 0.08f;
+
+	/** World Z offset (from the fog actor) where the high smoke haze is densest. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Sky", meta = (AllowPrivateAccess = "true"))
+	float HighSmogHeightOffset = 7000.0f;
+
 	/** 3 stars when cumulative carbon stays within this multiple of C_min (Default: 1.25x). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
 	float ThreeStarCarbonMultiplier = 1.25f;
@@ -459,6 +471,13 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TWeakObjectPtr<ASmokestack>> TrackedSmokestacks;
+
+	TWeakObjectPtr<class ADirectionalLight> SunLight;
+	TWeakObjectPtr<class AExponentialHeightFog> SkyFog;
+	float BaseSunIntensity = 0.0f;
+
+	/** Dims the sun and thickens the high smoke haze as carbon accumulates (0 = clear, 1 = choked). */
+	void ApplySkyChoke(float ChokeAlpha);
 
 	UFUNCTION()
 	void HandleSmokestackSealed(ASmokestack* SealedStack);

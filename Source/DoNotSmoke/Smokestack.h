@@ -132,6 +132,10 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USphereComponent> OverheadSmogCanopySphere;
 
+	/** Volumetric smoke cloud (NS_SkySmog) spreading from the top of the plume; its radius follows the canopy blocker and it dissipates when the stack is sealed (the sun pocket). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraComponent> CanopySmokeVFX;
+
 	/** Active dark smoke column VFX (NS_ToxicSmog or NS_HeavyToxicSmog). Deactivated upon sealing. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraComponent> ToxicSmogVFX;
@@ -169,7 +173,7 @@ private:
 	float LethalPlumeRadius = 220.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "200.0"))
-	float LethalPlumeHalfHeight = 1200.0f;
+	float LethalPlumeHalfHeight = 3400.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "200.0"))
 	float CanopyMinRadius = 800.0f;
@@ -178,7 +182,7 @@ private:
 	float CanopyMaxRadius = 3200.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
-	float CanopyWorldAltitude = 4250.0f;
+	float CanopyWorldAltitude = 8500.0f;
 
 	// ==========================================
 	// ARCHETYPE MESH ASSETS
@@ -213,6 +217,21 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraSystem> CleanSteamSystem;
 
+	/** Pitch-black dense plume used instead of ToxicSmogSystem on Type C (HeavyLethal) stacks. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> HeavyToxicSmogSystem;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> SkySmogSystem;
+
+	/** Height of the sky smoke cloud relative to the canopy blocker, so it sits on top of the rising plume. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float CanopySmokeOffsetZ = -500.0f;
+
+	/** Sky smoke spawn rate at the smallest and largest canopy radius (particles per second). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	FVector2D CanopySmokeSpawnRateRange = FVector2D(2.0f, 6.0f);
+
 	// ==========================================
 	// INTERNAL STATE
 	// ==========================================
@@ -222,4 +241,6 @@ private:
 	bool bMouthSealed[3] = { false, false, false };
 
 	void RefreshArchetypeCollisionState();
+	void UpdateCanopyCloud(float Radius);
+	UNiagaraSystem* GetActiveSmogSystem() const;
 };

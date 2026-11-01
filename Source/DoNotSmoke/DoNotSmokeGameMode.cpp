@@ -6,6 +6,10 @@
 #include "Smokestack.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Engine/DirectionalLight.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "Components/LightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
@@ -265,10 +269,10 @@ void UDoNotSmokeFlightHUDWidget::CreateProgressMaterials()
 float UDoNotSmokeFlightHUDWidget::AltitudeToRulerV(float Altitude)
 {
 	// Ruler texture rows (normalized V) for each altitude band boundary:
-	// dark smog bed 0-400u, red pull-up band 400-600u, orange chimney band 600-1400u, green open sky 1400-3900u
+	// dark smog bed 0-400u, red pull-up band 400-600u, orange chimney band 600-1400u, green open sky 1400-7800u
 	// These mirror the glider's KillFloor / SmogBed / PullUp / chimney band / GliderMaxCeilingAltitude values and are tied
 	// to the ruler art, so they must be updated together with those properties.
-	static const float Altitudes[] = { 0.0f, 400.0f, 600.0f, 1400.0f, 3900.0f };
+	static const float Altitudes[] = { 0.0f, 400.0f, 600.0f, 1400.0f, 7800.0f };
 	static const float RulerV[] = { 0.923f, 0.812f, 0.754f, 0.515f, 0.166f };
 
 	if (Altitude <= Altitudes[0])
@@ -936,6 +940,20 @@ void ADoNotSmokeGameMode::BeginPlay()
 	}
 
 	// Register all Private Jets in the active level
+	// Sky actors driven by carbon: first directional light is the sun, first height fog carries the high smoke haze
+	TActorIterator<ADirectionalLight> SunIt(World);
+	if (SunIt)
+	{
+		SunLight = *SunIt;
+		BaseSunIntensity = SunIt->GetLightComponent() ? SunIt->GetLightComponent()->Intensity : 0.0f;
+	}
+	TActorIterator<AExponentialHeightFog> FogIt(World);
+	if (FogIt)
+	{
+		SkyFog = *FogIt;
+	}
+	ApplySkyChoke(0.0f);
+
 	for (TActorIterator<APrivateJet> It(World); It; ++It)
 	{
 		It->OnJetApproachStateChanged.AddDynamic(this, &ADoNotSmokeGameMode::HandlePrivateJetApproachChanged);
@@ -985,6 +1003,7 @@ void ADoNotSmokeGameMode::Tick(float DeltaTime)
 		const float MaxChokeCarbon = FMath::Max(100.0f, TargetMinCarbonKg * SkyChokeCarbonMultiplier);
 		const float ChokeAlpha = FMath::Clamp(CumulativeCarbonKg / MaxChokeCarbon, 0.0f, 1.0f);
 		SunPocketOpenRatio = 1.0f - ChokeAlpha;
+		ApplySkyChoke(ChokeAlpha);
 
 		// Expand overhead smog canopies on remaining unsealed smokestacks
 		for (const TWeakObjectPtr<ASmokestack>& WeakStack : TrackedSmokestacks)
@@ -1037,6 +1056,30 @@ void ADoNotSmokeGameMode::NotifyCarbonSealFired()
 	++TotalShotsFired;
 }
 
+void ADoNotSmokeGameMode::ApplySkyChoke(float ChokeAlpha)
+{
+	const float Alpha = FMath::Clamp(ChokeAlpha, 0.0f, 1.0f);
+
+	if (ADirectionalLight* Sun = SunLight.Get())
+	{
+		if (ULightComponent* SunComponent = Sun->GetLightComponent())
+		{
+			SunComponent->SetIntensity(BaseSunIntensity * FMath::Lerp(1.0f, ChokedSunIntensityScale, Alpha));
+		}
+	}
+
+	if (AExponentialHeightFog* Fog = SkyFog.Get())
+	{
+		if (UExponentialHeightFogComponent* FogComponent = Fog->GetComponent())
+		{
+			// Second fog layer = smoke haze high in the sky, independent of the smog bed's first layer
+			FogComponent->SecondFogData.FogDensity = ChokedHighSmogDensity * Alpha;
+			FogComponent->SecondFogData.FogHeightOffset = HighSmogHeightOffset;
+			FogComponent->MarkRenderStateDirty();
+		}
+	}
+}
+
 void ADoNotSmokeGameMode::DebugForceLevelComplete(int32 Stars)
 {
 #if !UE_BUILD_SHIPPING
@@ -1084,6 +1127,7 @@ void ADoNotSmokeGameMode::HandleSmokestackSealed(ASmokestack* SealedStack)
 	{
 		bIsLevelCompleted = true;
 		SunPocketOpenRatio = 1.0f;
+		ApplySkyChoke(0.0f);
 
 		const int32 FinalStars = CalculateStarRating();
 		const float FinalAccuracy = GetShotAccuracyPercent();

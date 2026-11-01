@@ -48,7 +48,7 @@ APrivateJet::APrivateJet()
 	BannerTextRender->SetWorldSize(72.0f);
 	BannerTextRender->SetTextRenderColor(FColor::Yellow);
 
-	// Wake turbulence box spans from jet altitude (4200u) down to chimney top height (1400u) relative to the jet
+	// Wake turbulence box spans from jet altitude (8400u) down to chimney top height (1400u) relative to the jet
 	WakeTurbulenceBox = CreateDefaultSubobject<UBoxComponent>(TEXT("WakeTurbulenceBox"));
 	WakeTurbulenceBox->SetupAttachment(MovingJetCarriage);
 	WakeTurbulenceBox->SetRelativeLocation(WakeBoxOffset);
@@ -86,7 +86,7 @@ void APrivateJet::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Stratospheric minimum altitude safety enforcement (JetAltitude, above the 3900u glider ceiling)
+	// Stratospheric minimum altitude safety enforcement (JetAltitude, above the 7800u glider ceiling)
 	if (GetActorLocation().Z < JetAltitude)
 	{
 		FVector CorrectedLoc = GetActorLocation();

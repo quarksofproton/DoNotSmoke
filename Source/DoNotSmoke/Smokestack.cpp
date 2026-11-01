@@ -97,6 +97,17 @@ ASmokestack::ASmokestack()
 	OverheadSmogCanopySphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	OverheadSmogCanopySphere->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
+	CanopySmokeVFX = CreateDefaultSubobject<UNiagaraComponent>(TEXT("CanopySmokeVFX"));
+	CanopySmokeVFX->SetupAttachment(OverheadSmogCanopySphere);
+	CanopySmokeVFX->SetRelativeLocation(FVector(0.0f, 0.0f, CanopySmokeOffsetZ));
+	CanopySmokeVFX->bAutoActivate = true;
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> SkySmogAsset(TEXT("/Game/Game/VFX/NS_SkySmog.NS_SkySmog"));
+	if (SkySmogAsset.Succeeded())
+	{
+		SkySmogSystem = SkySmogAsset.Object;
+		CanopySmokeVFX->SetAsset(SkySmogSystem);
+	}
+
 	auto InitVFX = [this](const TCHAR* Name, USphereComponent* ParentRim, bool bAutoAct) -> UNiagaraComponent*
 	{
 		UNiagaraComponent* Comp = CreateDefaultSubobject<UNiagaraComponent>(Name);
@@ -174,6 +185,12 @@ ASmokestack::ASmokestack()
 		CleanSteamSystem = CleanSteamAsset.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> HeavyToxicSmogAsset(TEXT("/Game/Game/VFX/NS_HeavyToxicSmog.NS_HeavyToxicSmog"));
+	if (HeavyToxicSmogAsset.Succeeded())
+	{
+		HeavyToxicSmogSystem = HeavyToxicSmogAsset.Object;
+	}
+
 	if (ToxicSmogSystem)
 	{
 		ToxicSmogVFX->SetAsset(ToxicSmogSystem);
@@ -209,6 +226,7 @@ void ASmokestack::OnConstruction(const FTransform& Transform)
 		const FVector ActorLoc = GetActorLocation();
 		OverheadSmogCanopySphere->SetWorldLocation(FVector(ActorLoc.X, ActorLoc.Y, CanopyWorldAltitude));
 		OverheadSmogCanopySphere->SetSphereRadius(CanopyMinRadius);
+		UpdateCanopyCloud(CanopyMinRadius);
 	}
 
 	RefreshArchetypeCollisionState();
@@ -264,6 +282,25 @@ void ASmokestack::SetCanopyExpansionAlpha(float ExpansionAlpha)
 	const float ClampedAlpha = FMath::Clamp(ExpansionAlpha, 0.0f, 1.0f);
 	const float NewRadius = FMath::Lerp(CanopyMinRadius, CanopyMaxRadius, ClampedAlpha);
 	OverheadSmogCanopySphere->SetSphereRadius(NewRadius);
+	UpdateCanopyCloud(NewRadius);
+}
+
+void ASmokestack::UpdateCanopyCloud(float Radius)
+{
+	if (!CanopySmokeVFX)
+	{
+		return;
+	}
+
+	const float GrowthAlpha = FMath::GetRangePct(CanopyMinRadius, CanopyMaxRadius, Radius);
+	CanopySmokeVFX->SetRelativeLocation(FVector(0.0f, 0.0f, CanopySmokeOffsetZ));
+	CanopySmokeVFX->SetVariableFloat(TEXT("SpreadRadius"), Radius);
+	CanopySmokeVFX->SetVariableFloat(TEXT("SpawnRate"), FMath::Lerp(CanopySmokeSpawnRateRange.X, CanopySmokeSpawnRateRange.Y, FMath::Clamp(GrowthAlpha, 0.0f, 1.0f)));
+}
+
+UNiagaraSystem* ASmokestack::GetActiveSmogSystem() const
+{
+	return (SmokestackType == ESmokestackType::HeavyLethal && HeavyToxicSmogSystem) ? HeavyToxicSmogSystem.Get() : ToxicSmogSystem.Get();
 }
 
 bool ASmokestack::TrySealTarget_Implementation(AActor* SealInstigator)
@@ -520,9 +557,10 @@ void ASmokestack::RefreshArchetypeCollisionState()
 
 		if (ToxicVFXs[i])
 		{
-			if (ToxicSmogSystem && ToxicVFXs[i]->GetAsset() != ToxicSmogSystem)
+			UNiagaraSystem* SmogSystem = GetActiveSmogSystem();
+			if (SmogSystem && ToxicVFXs[i]->GetAsset() != SmogSystem)
 			{
-				ToxicVFXs[i]->SetAsset(ToxicSmogSystem);
+				ToxicVFXs[i]->SetAsset(SmogSystem);
 			}
 
 			if (bIsMouthActive && !bIsThisMouthSealed)
@@ -575,5 +613,22 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	if (OverheadSmogCanopySphere)
 	{
 		OverheadSmogCanopySphere->SetCollisionEnabled(bIsSealed ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryOnly);
+	}
+
+	// Sealing stops new sky smoke; existing particles drift out, opening the sun pocket gradually
+	if (CanopySmokeVFX)
+	{
+		if (SkySmogSystem && CanopySmokeVFX->GetAsset() != SkySmogSystem)
+		{
+			CanopySmokeVFX->SetAsset(SkySmogSystem);
+		}
+		if (bIsSealed)
+		{
+			CanopySmokeVFX->Deactivate();
+		}
+		else if (!CanopySmokeVFX->IsActive())
+		{
+			CanopySmokeVFX->Activate(true);
+		}
 	}
 }

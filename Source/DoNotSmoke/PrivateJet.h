@@ -16,7 +16,7 @@ class UNiagaraComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnJetApproachStateChangedSignature, bool, bIsApproachingOrPassing, FText, ActiveBannerSlogan);
 
 /**
- * Stratospheric VIP Private Jet (4200u altitude) flying along a spline path.
+ * Stratospheric VIP Private Jet (8400u altitude) flying along a spline path.
  * Broadcasts HUD approach warnings (!), displays rotating satirical COP31 greenwashing banners,
  * and trails a non-lethal WakeTurbulenceBox causing downwash altitude loss via IBPI_FlightHazard.
  */
@@ -80,7 +80,7 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UTextRenderComponent> BannerTextRender;
 
-	/** Trailing wake turbulence volume spanning 4200u (jet altitude) down to 1400u (chimney top height) to catch gliders in the flight band. */
+	/** Trailing wake turbulence volume spanning 8400u (jet altitude) down to 1400u (chimney top height) to catch gliders in the flight band. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBoxComponent> WakeTurbulenceBox;
 
@@ -92,15 +92,15 @@ private:
 	// ==========================================
 	/** World Z altitude (units) the jet is snapped to on BeginPlay if it was placed below it. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
-	float JetAltitude = 4200.0f;
+	float JetAltitude = 8400.0f;
 
 	/** Wake box location relative to the jet carriage (centre sits 1400u below jet altitude). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
-	FVector WakeBoxOffset = FVector(-1500.0f, 0.0f, -1400.0f);
+	FVector WakeBoxOffset = FVector(-1500.0f, 0.0f, -3500.0f);
 
-	/** Wake box half-extent; with the offset it spans 4200u down to 1400u relative to the jet. */
+	/** Wake box half-extent; with the offset it spans the jet altitude (8400u) down to 1400u. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
-	FVector WakeBoxExtent = FVector(3500.0f, 3200.0f, 1400.0f);
+	FVector WakeBoxExtent = FVector(3500.0f, 3200.0f, 3500.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	float JetFlightSpeed = 2800.0f;
