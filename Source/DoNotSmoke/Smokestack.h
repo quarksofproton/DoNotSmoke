@@ -12,6 +12,8 @@ class USphereComponent;
 class UCapsuleComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class UAudioComponent;
+class USoundBase;
 class ASmokestack;
 
 UENUM(BlueprintType)
@@ -79,7 +81,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	/** Blueprint cosmetic hook fired each time a chimney mouth transitions from toxic smoke to clean steam (once per mouth). */
+	/** Blueprint cosmetic hook fired each time a chimney mouth is sealed and starts to sparkle (once per mouth). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Smokestack|Cosmetics", meta = (DisplayName = "On Smokestack Sealed (Cosmetics)"))
 	void BP_OnSmokestackSealed();
 
@@ -146,15 +148,19 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraComponent> ToxicSmogVFX_3;
 
-	/** Clean white steam plume VFX (NS_CleanSteam). Activated upon sealing. */
+	/** Warm sparkle on a sealed rim (NS_SealSparkle), standing in for the solar panel glint until the panel mesh lands. Activated upon sealing. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UNiagaraComponent> CleanSteamVFX;
+	TObjectPtr<UNiagaraComponent> SealSparkleVFX;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UNiagaraComponent> CleanSteamVFX_2;
+	TObjectPtr<UNiagaraComponent> SealSparkleVFX_2;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UNiagaraComponent> CleanSteamVFX_3;
+	TObjectPtr<UNiagaraComponent> SealSparkleVFX_3;
+
+	/** Low pressurized rumble (SFX_Heavy_Smog_Rumble) heard near an unsealed Type C stack. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smokestack|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAudioComponent> HeavyRumbleAudio;
 
 	// ==========================================
 	// DESIGNER TUNING / CONFIG
@@ -230,7 +236,7 @@ private:
 	TObjectPtr<UNiagaraSystem> ToxicSmogSystem;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UNiagaraSystem> CleanSteamSystem;
+	TObjectPtr<UNiagaraSystem> SealSparkleSystem;
 
 	/** Pitch-black dense plume used instead of ToxicSmogSystem on Type C (HeavyLethal) stacks. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
@@ -238,6 +244,20 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraSystem> SkySmogSystem;
+
+	/** Played once at the rim when a mouth is sealed (SFX_Seal_Latch). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USoundBase> SealLatchSound;
+
+	/** Sealed-rim sparkle: particles per second, sprite size multiplier and spread as a fraction of RimSphereRadius. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float SealSparkleSpawnRate = 8.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float SealSparkleSizeScale = 0.6f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float SealSparkleSpreadFraction = 0.7f;
 
 	/**
 	 * The canopy blocker is the bottom cap of a huge sphere lifted this far above CanopyWorldAltitude, so it acts as a flat

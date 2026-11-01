@@ -8,6 +8,9 @@
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
 // Rev3 mesh asset paths, shared by the constructor loaders and ResolveRev3Mesh
@@ -122,9 +125,9 @@ ASmokestack::ASmokestack()
 	ToxicSmogVFX_2 = InitVFX(TEXT("ToxicSmogVFX_2"), RimTargetSphere_2, true);
 	ToxicSmogVFX_3 = InitVFX(TEXT("ToxicSmogVFX_3"), RimTargetSphere_3, true);
 
-	CleanSteamVFX = InitVFX(TEXT("CleanSteamVFX"), RimTargetSphere, false);
-	CleanSteamVFX_2 = InitVFX(TEXT("CleanSteamVFX_2"), RimTargetSphere_2, false);
-	CleanSteamVFX_3 = InitVFX(TEXT("CleanSteamVFX_3"), RimTargetSphere_3, false);
+	SealSparkleVFX = InitVFX(TEXT("SealSparkleVFX"), RimTargetSphere, false);
+	SealSparkleVFX_2 = InitVFX(TEXT("SealSparkleVFX_2"), RimTargetSphere_2, false);
+	SealSparkleVFX_3 = InitVFX(TEXT("SealSparkleVFX_3"), RimTargetSphere_3, false);
 
 	// Load imported Do Not Smoke modular chimney & seal cap meshes (Revision 3)
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SingleAsset(MeshSinglePath);
@@ -181,10 +184,30 @@ ASmokestack::ASmokestack()
 		ToxicSmogSystem = ToxicSmogAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CleanSteamAsset(TEXT("/Game/Game/VFX/NS_CleanSteam.NS_CleanSteam"));
-	if (CleanSteamAsset.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> SealSparkleAsset(TEXT("/Game/Game/VFX/NS_SealSparkle.NS_SealSparkle"));
+	if (SealSparkleAsset.Succeeded())
 	{
-		CleanSteamSystem = CleanSteamAsset.Object;
+		SealSparkleSystem = SealSparkleAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> SealLatchAsset(TEXT("/Game/Game/Audio/SFX_Seal_Latch.SFX_Seal_Latch"));
+	if (SealLatchAsset.Succeeded())
+	{
+		SealLatchSound = SealLatchAsset.Object;
+	}
+
+	HeavyRumbleAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("HeavyRumbleAudio"));
+	HeavyRumbleAudio->SetupAttachment(RimTargetSphere);
+	HeavyRumbleAudio->bAutoActivate = false;
+	HeavyRumbleAudio->bOverrideAttenuation = true;
+	HeavyRumbleAudio->AttenuationOverrides.bAttenuate = true;
+	HeavyRumbleAudio->AttenuationOverrides.bSpatialize = true;
+	HeavyRumbleAudio->AttenuationOverrides.AttenuationShapeExtents = FVector(1500.0f);
+	HeavyRumbleAudio->AttenuationOverrides.FalloffDistance = 6000.0f;
+	static ConstructorHelpers::FObjectFinder<USoundBase> HeavyRumbleAsset(TEXT("/Game/Game/Audio/SFX_Heavy_Smog_Rumble.SFX_Heavy_Smog_Rumble"));
+	if (HeavyRumbleAsset.Succeeded())
+	{
+		HeavyRumbleAudio->SetSound(HeavyRumbleAsset.Object);
 	}
 
 	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> HeavyToxicSmogAsset(TEXT("/Game/Game/VFX/NS_HeavyToxicSmog.NS_HeavyToxicSmog"));
@@ -200,11 +223,11 @@ ASmokestack::ASmokestack()
 		ToxicSmogVFX_3->SetAsset(ToxicSmogSystem);
 	}
 
-	if (CleanSteamSystem)
+	if (SealSparkleSystem)
 	{
-		CleanSteamVFX->SetAsset(CleanSteamSystem);
-		CleanSteamVFX_2->SetAsset(CleanSteamSystem);
-		CleanSteamVFX_3->SetAsset(CleanSteamSystem);
+		SealSparkleVFX->SetAsset(SealSparkleSystem);
+		SealSparkleVFX_2->SetAsset(SealSparkleSystem);
+		SealSparkleVFX_3->SetAsset(SealSparkleSystem);
 	}
 
 	if (MeshSingle)
@@ -240,7 +263,24 @@ void ASmokestack::BeginPlay()
 		bMouthSealed[i] = bIsSealed;
 	}
 
+	// NS_SealSparkle reuses NS_SunMotes' user parameters: cylinder radius, spawn rate, sprite size multiplier
+	UNiagaraComponent* SparkleVFXs[3] = { SealSparkleVFX, SealSparkleVFX_2, SealSparkleVFX_3 };
+	for (UNiagaraComponent* Sparkle : SparkleVFXs)
+	{
+		if (Sparkle)
+		{
+			Sparkle->SetVariableFloat(TEXT("SpreadRadius"), RimSphereRadius * SealSparkleSpreadFraction);
+			Sparkle->SetVariableFloat(TEXT("SpawnRate"), SealSparkleSpawnRate);
+			Sparkle->SetVariableFloat(TEXT("SizeScale"), SealSparkleSizeScale);
+		}
+	}
+
 	RefreshArchetypeCollisionState();
+
+	if (HeavyRumbleAudio && SmokestackType == ESmokestackType::HeavyLethal && !bIsSealed)
+	{
+		HeavyRumbleAudio->Play(FMath::FRandRange(0.0f, 5.0f));
+	}
 }
 
 int32 ASmokestack::GetActiveMouthCount() const
@@ -323,7 +363,7 @@ bool ASmokestack::TrySealTarget_Implementation(AActor* SealInstigator)
 
 	USphereComponent* RimSpheres[3] = { RimTargetSphere, RimTargetSphere_2, RimTargetSphere_3 };
 	UNiagaraComponent* ToxicVFXs[3] = { ToxicSmogVFX, ToxicSmogVFX_2, ToxicSmogVFX_3 };
-	UNiagaraComponent* CleanVFXs[3] = { CleanSteamVFX, CleanSteamVFX_2, CleanSteamVFX_3 };
+	UNiagaraComponent* SparkleVFXs[3] = { SealSparkleVFX, SealSparkleVFX_2, SealSparkleVFX_3 };
 
 	const int32 ActiveMouths = GetActiveMouthCount();
 	const FVector HitLocation = SealInstigator ? SealInstigator->GetActorLocation() : GetActorLocation();
@@ -363,9 +403,19 @@ bool ASmokestack::TrySealTarget_Implementation(AActor* SealInstigator)
 		ToxicVFXs[BestMouthIdx]->Deactivate();
 	}
 
-	if (CleanVFXs[BestMouthIdx])
+	if (SparkleVFXs[BestMouthIdx])
 	{
-		CleanVFXs[BestMouthIdx]->Activate(true);
+		SparkleVFXs[BestMouthIdx]->Activate(true);
+	}
+
+	if (SealLatchSound && RimSpheres[BestMouthIdx])
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, SealLatchSound, RimSpheres[BestMouthIdx]->GetComponentLocation());
+	}
+
+	if (bIsSealed && HeavyRumbleAudio && HeavyRumbleAudio->IsPlaying())
+	{
+		HeavyRumbleAudio->FadeOut(1.5f, 0.0f);
 	}
 
 	OnSmokestackSealed.Broadcast(this);
@@ -542,7 +592,7 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	USphereComponent* RimSpheres[3] = { RimTargetSphere, RimTargetSphere_2, RimTargetSphere_3 };
 	UStaticMeshComponent* SealCaps[3] = { SealCapMesh, SealCapMesh_2, SealCapMesh_3 };
 	UNiagaraComponent* ToxicVFXs[3] = { ToxicSmogVFX, ToxicSmogVFX_2, ToxicSmogVFX_3 };
-	UNiagaraComponent* CleanVFXs[3] = { CleanSteamVFX, CleanSteamVFX_2, CleanSteamVFX_3 };
+	UNiagaraComponent* SparkleVFXs[3] = { SealSparkleVFX, SealSparkleVFX_2, SealSparkleVFX_3 };
 
 	const float BodyHalfHeight = (MouthHeightZ - 80.0f) * 0.5f;
 
@@ -601,25 +651,25 @@ void ASmokestack::RefreshArchetypeCollisionState()
 			}
 		}
 
-		if (CleanVFXs[i])
+		if (SparkleVFXs[i])
 		{
-			if (CleanSteamSystem && CleanVFXs[i]->GetAsset() != CleanSteamSystem)
+			if (SealSparkleSystem && SparkleVFXs[i]->GetAsset() != SealSparkleSystem)
 			{
-				CleanVFXs[i]->SetAsset(CleanSteamSystem);
+				SparkleVFXs[i]->SetAsset(SealSparkleSystem);
 			}
 
 			if (bIsMouthActive && bIsThisMouthSealed)
 			{
-				if (!CleanVFXs[i]->IsActive())
+				if (!SparkleVFXs[i]->IsActive())
 				{
-					CleanVFXs[i]->Activate(true);
+					SparkleVFXs[i]->Activate(true);
 				}
-				CleanVFXs[i]->SetVisibility(true);
+				SparkleVFXs[i]->SetVisibility(true);
 			}
 			else
 			{
-				CleanVFXs[i]->Deactivate();
-				CleanVFXs[i]->SetVisibility(false);
+				SparkleVFXs[i]->Deactivate();
+				SparkleVFXs[i]->SetVisibility(false);
 			}
 		}
 	}

@@ -12,6 +12,7 @@ class UStaticMeshComponent;
 class UBoxComponent;
 class UTextRenderComponent;
 class UNiagaraComponent;
+class UAudioComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnJetApproachStateChangedSignature, bool, bIsApproachingOrPassing, FText, ActiveBannerSlogan);
 
@@ -125,8 +126,9 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	float WakeDownwashSpeed = 2400.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
-	TArray<FText> BannerSlogans;
+	/** Jet engine fly-by roar (SFX_Jet_Roar), played from the moving carriage at the start of each pass. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PrivateJet|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAudioComponent> JetRoarAudio;
 
 	/** Self-timed passes every PassIntervalSeconds; disabled by the GameMode when it dispatches jets itself. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))

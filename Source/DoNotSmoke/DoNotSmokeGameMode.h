@@ -19,6 +19,8 @@ class AGliderPawn;
 class ASmokestack;
 class APrivateJet;
 class ADoNotSmokeGameMode;
+class UAudioComponent;
+class USoundBase;
 
 /**
  * Live flight HUD built from Berf's UI textures: crosshair with radial seal cooldown ring,
@@ -35,6 +37,9 @@ public:
 
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+	/** Runs the "3, 2, 1, RENEW IT!" countdown on real time; the GameMode unpauses on "RENEW IT!". */
+	void StartCountdown();
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UImage> CrosshairImage;
@@ -150,6 +155,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
 	float LowBatteryPercent = 25.0f;
 
+	/** Seconds each countdown number stays on screen, and how long "RENEW IT!" lingers once flight has started. */
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
+	float CountdownStepSeconds = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
+	float CountdownGoHoldSeconds = 1.0f;
+
+	/** The top-left controls panel stays this long after takeoff, then fades out. */
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
+	float ControlsPanelSeconds = 20.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
+	float ControlsPanelFadeSeconds = 1.5f;
+
 private:
 	TWeakObjectPtr<AGliderPawn> CachedGlider;
 	TWeakObjectPtr<ADoNotSmokeGameMode> CachedGameMode;
@@ -168,7 +187,23 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> BatteryFillMID;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> CountdownText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> ControlsPanel;
+
+	/** Real seconds since the countdown started; negative while no countdown runs. */
+	float CountdownElapsed = -1.0f;
+	bool bCountdownGoSent = false;
+
+	/** Real seconds since takeoff for the controls panel; negative until takeoff. */
+	float ControlsPanelAge = -1.0f;
+
 	void BuildFallbackWidgetTree();
+	void BuildControlsPanel(UCanvasPanel* RootCanvas);
+	void TickCountdown(float DeltaTime);
+	void TickControlsPanel(float DeltaTime);
 	void CreateProgressMaterials();
 	void UpdateCrosshairAndCooldown(AGliderPawn* Glider);
 	void UpdateBattery(AGliderPawn* Glider);
@@ -332,6 +367,67 @@ private:
 	void TickConfetti(float DeltaTime);
 };
 
+/**
+ * Title screen over the paused level: logo, tagline and flat placeholder buttons for Play, Language and Quit.
+ * Button art from Berf will replace the plain rectangles later.
+ */
+UCLASS(Blueprintable)
+class DONOTSMOKE_API UDoNotSmokeMainMenuWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	UDoNotSmokeMainMenuWidget(const FObjectInitializer& ObjectInitializer);
+
+	virtual void NativeOnInitialized() override;
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Assets")
+	TObjectPtr<UTexture2D> ProhibitionTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Assets")
+	TObjectPtr<UTexture2D> StackPuffTexture;
+
+private:
+	bool bBuiltFallbackTree = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> PlayButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> LanguageButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> QuitButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> TaglineText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> PlayText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> LanguageText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> QuitText;
+
+	void BuildFallbackWidgetTree();
+	void RefreshTexts();
+
+	UFUNCTION()
+	void HandlePlayClicked();
+
+	UFUNCTION()
+	void HandleLanguageClicked();
+
+	UFUNCTION()
+	void HandleQuitClicked();
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
 	FOnLevelCompletedSignature,
 	int32, StarRating,
@@ -423,9 +519,16 @@ public:
 	UFUNCTION(Exec, Category = "DoNotSmoke|Debug")
 	void DebugSealNearestStack();
 
-	/** Reloads the active level (called from the crash screen restart button). */
+	/** Reloads the active level (called from the crash screen restart button); skips the title screen. */
 	UFUNCTION(BlueprintCallable, Category = "DoNotSmoke|Flow")
 	void TriggerInstantRestart();
+
+	/** Title screen Play button: hides the menu and starts the countdown. */
+	UFUNCTION(BlueprintCallable, Category = "DoNotSmoke|Flow")
+	void StartFlightFromMenu();
+
+	/** Called by the HUD on "RENEW IT!": unpauses the level so the flight begins. */
+	void HandleCountdownFinished();
 
 protected:
 	virtual void BeginPlay() override;
@@ -451,6 +554,22 @@ protected:
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "DoNotSmoke|UI")
 	TObjectPtr<UDoNotSmokeCrashWidget> CrashWidget;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	TSubclassOf<UDoNotSmokeMainMenuWidget> MainMenuWidgetClass;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	TObjectPtr<UDoNotSmokeMainMenuWidget> MainMenuWidget;
+
+	/** Level music, played as a UI sound so it keeps going over the paused title screen and newspaper. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Audio")
+	TObjectPtr<USoundBase> LevelMusic;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Audio")
+	float LevelMusicVolume = 0.45f;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> LevelMusicAudio;
 
 private:
 	// ==========================================
@@ -523,6 +642,13 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|SunRain", meta = (AllowPrivateAccess = "true"))
 	float SunRainCheckInterval = 0.5f;
 
+	/** Light motes per second per cell, and their sprite size multiplier. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|SunRain", meta = (AllowPrivateAccess = "true"))
+	float SunRainSpawnRate = 1.6f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|SunRain", meta = (AllowPrivateAccess = "true"))
+	float SunRainSizeScale = 0.15f;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<class UNiagaraComponent>> SunRainCells;
 
@@ -539,6 +665,19 @@ private:
 
 	/** Dims the sun as carbon accumulates (0 = clear, 1 = choked); no haze is added to the play space. */
 	void ApplySkyChoke(float ChokeAlpha);
+
+	void ShowMainMenu();
+	void BeginCountdown();
+
+	/** Freezes the level behind the title screen; deferred a moment after BeginPlay so the camera arm can settle first. */
+	void FreezeForPreFlight();
+
+	/** False until the countdown ends: no carbon, time or jets accumulate while the title screen or countdown is up. */
+	bool bFlightStarted = false;
+	FTimerHandle PreFlightFreezeTimerHandle;
+
+	UFUNCTION()
+	void HandleLevelMusicFinished();
 
 	UFUNCTION()
 	void HandleSmokestackSealed(ASmokestack* SealedStack);

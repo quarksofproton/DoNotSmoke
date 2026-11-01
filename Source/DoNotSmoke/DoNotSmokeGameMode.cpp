@@ -1,6 +1,7 @@
 // Copyright Do Not Smoke Team. All Rights Reserved.
 
 #include "DoNotSmokeGameMode.h"
+#include "DoNotSmokeLocale.h"
 #include "GliderPawn.h"
 #include "PrivateJet.h"
 #include "Smokestack.h"
@@ -12,7 +13,10 @@
 #include "TimerManager.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/LightComponent.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/CanvasPanel.h"
@@ -25,6 +29,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/SizeBox.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -87,6 +92,38 @@ namespace DoNotSmokeUI
 			Stars += TEXT("★");
 		}
 		return Stars;
+	}
+
+	static void SetBold(UTextBlock* Text)
+	{
+		FSlateFontInfo Font = Text->GetFont();
+		Font.TypefaceFontName = TEXT("Bold");
+		Text->SetFont(Font);
+	}
+
+	/** Placeholder button: a flat rounded rectangle that brightens on hover, until Berf's button art arrives. */
+	static UButton* MakeFlatButton(UWidgetTree* Tree, const FName Name, const FLinearColor& Color, UTextBlock* Label)
+	{
+		UButton* Button = Tree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
+
+		FSlateBrush Brush;
+		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+		Brush.OutlineSettings = FSlateBrushOutlineSettings(10.0f);
+		Brush.TintColor = FSlateColor(Color);
+
+		FButtonStyle Style = Button->GetStyle();
+		Style.Normal = Brush;
+		Style.Hovered = Brush;
+		Style.Hovered.TintColor = FSlateColor(Color * 1.35f);
+		Style.Pressed = Brush;
+		Style.Pressed.TintColor = FSlateColor(Color * 0.7f);
+		Style.NormalPadding = FMargin(0.0f);
+		Style.PressedPadding = FMargin(0.0f, 3.0f, 0.0f, 0.0f);
+		Button->SetStyle(Style);
+
+		Label->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Button->AddChild(Label);
+		return Button;
 	}
 
 	/** Auto-sized and centred on Position so text stays vertically centred on its panel art. */
@@ -225,7 +262,7 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 	// Sits right of the top bar at the same height (bar spans x -420..420, y 16..128)
 	JetWarningPanel = AddImage(WidgetTree, RootCanvas, TEXT("JetWarningPanel"), WarningPanelTexture, TopCenter, FVector2D(0.0f, 0.0f), FVector2D(430.0f, 16.0f), FVector2D(448.0f, 112.0f));
 	JetWarningText = MakeText(WidgetTree, TEXT("JetWarningText"), 18, FLinearColor(1.0f, 0.25f, 0.2f, 1.0f));
-	JetWarningText->SetText(FText::FromString(TEXT("!  VIP JET INCOMING  !")));
+	JetWarningText->SetText(DoNotSmokeLocale::Text(TEXT("HudJetIncoming")));
 	AddText(RootCanvas, JetWarningText, TopCenter, FVector2D(654.0f, 72.0f));
 	JetWarningPanel->SetVisibility(ESlateVisibility::Collapsed);
 	JetWarningText->SetVisibility(ESlateVisibility::Collapsed);
@@ -235,13 +272,176 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 	PullUpChevron = AddImage(WidgetTree, RootCanvas, TEXT("PullUpChevron"), ChevronUpTexture, PullUpAnchor, Centered, FVector2D(0.0f, -105.0f), FVector2D(110.0f, 110.0f));
 	PullUpPanel = AddImage(WidgetTree, RootCanvas, TEXT("PullUpPanel"), WarningPanelTexture, PullUpAnchor, Centered, FVector2D::ZeroVector, FVector2D(520.0f, 130.0f));
 	PullUpWarningText = MakeText(WidgetTree, TEXT("PullUpWarningText"), 40, FLinearColor(1.0f, 0.15f, 0.1f, 1.0f));
-	PullUpWarningText->SetText(FText::FromString(TEXT("PULL UP!")));
+	PullUpWarningText->SetText(DoNotSmokeLocale::Text(TEXT("HudPullUp")));
 	AddText(RootCanvas, PullUpWarningText, PullUpAnchor, FVector2D::ZeroVector);
 	PullUpChevron->SetVisibility(ESlateVisibility::Collapsed);
 	PullUpPanel->SetVisibility(ESlateVisibility::Collapsed);
 	PullUpWarningText->SetVisibility(ESlateVisibility::Collapsed);
 
+	// 8. Top left: controls tutorial panel (shown at takeoff, fades out later)
+	BuildControlsPanel(RootCanvas);
+
+	// 9. Center: big "3, 2, 1, RENEW IT!" countdown
+	CountdownText = MakeText(WidgetTree, TEXT("CountdownText"), 120, FLinearColor(1.0f, 0.86f, 0.25f, 1.0f));
+	SetBold(CountdownText);
+	FSlateFontInfo CountdownFont = CountdownText->GetFont();
+	CountdownFont.OutlineSettings.OutlineSize = 4;
+	CountdownFont.OutlineSettings.OutlineColor = FLinearColor(0.05f, 0.05f, 0.08f, 0.85f);
+	CountdownText->SetFont(CountdownFont);
+	AddText(RootCanvas, CountdownText, Center, FVector2D(0.0f, -60.0f));
+	CountdownText->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+	CountdownText->SetVisibility(ESlateVisibility::Collapsed);
+
 	bBuiltFallbackTree = true;
+}
+
+void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
+{
+	using namespace DoNotSmokeUI;
+
+	const FLinearColor KeyColor(1.0f, 0.86f, 0.25f, 1.0f);
+	const FLinearColor ActionColor(0.95f, 0.95f, 0.95f, 1.0f);
+
+	UVerticalBox* Rows = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ControlsRows"));
+
+	UTextBlock* Title = MakeText(WidgetTree, TEXT("ControlsTitle"), 18, KeyColor);
+	SetBold(Title);
+	Title->SetJustification(ETextJustify::Left);
+	Title->SetText(DoNotSmokeLocale::Text(TEXT("CtrlTitle")));
+	Rows->AddChildToVerticalBox(Title)->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+
+	// Key column has a fixed width so the action texts line up
+	static const TCHAR* const RowKeys[][2] = {
+		{ TEXT("CtrlKeyPitch"), TEXT("CtrlPitch") },
+		{ TEXT("CtrlKeyRoll"), TEXT("CtrlRoll") },
+		{ TEXT("CtrlKeyAim"), TEXT("CtrlAim") },
+		{ TEXT("CtrlKeyFire"), TEXT("CtrlFire") },
+		{ TEXT("CtrlKeyBoost"), TEXT("CtrlBoost") },
+	};
+	for (const auto& RowKey : RowKeys)
+	{
+		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+
+		USizeBox* KeyBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		KeyBox->SetWidthOverride(160.0f);
+		UTextBlock* KeyText = MakeText(WidgetTree, NAME_None, 15, KeyColor);
+		SetBold(KeyText);
+		KeyText->SetJustification(ETextJustify::Left);
+		KeyText->SetText(DoNotSmokeLocale::Text(RowKey[0]));
+		KeyBox->AddChild(KeyText);
+		Row->AddChildToHorizontalBox(KeyBox);
+
+		UTextBlock* ActionText = MakeText(WidgetTree, NAME_None, 15, ActionColor);
+		ActionText->SetJustification(ETextJustify::Left);
+		ActionText->SetText(DoNotSmokeLocale::Text(RowKey[1]));
+		Row->AddChildToHorizontalBox(ActionText);
+
+		Rows->AddChildToVerticalBox(Row)->SetPadding(FMargin(0.0f, 2.0f));
+	}
+
+	UTextBlock* Hint = MakeText(WidgetTree, TEXT("ControlsHint"), 13, FLinearColor(0.7f, 0.85f, 1.0f, 1.0f));
+	Hint->SetJustification(ETextJustify::Left);
+	Hint->SetText(DoNotSmokeLocale::Text(TEXT("CtrlHint")));
+	Rows->AddChildToVerticalBox(Hint)->SetPadding(FMargin(0.0f, 8.0f, 0.0f, 0.0f));
+
+	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ControlsPanel"));
+	Panel->SetBrushColor(FLinearColor(0.02f, 0.03f, 0.05f, 0.6f));
+	Panel->SetPadding(FMargin(18.0f, 14.0f));
+	Panel->SetContent(Rows);
+	Panel->SetVisibility(ESlateVisibility::Collapsed);
+	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(Panel))
+	{
+		CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f));
+		CanvasSlot->SetPosition(FVector2D(24.0f, 24.0f));
+		CanvasSlot->SetAutoSize(true);
+	}
+	ControlsPanel = Panel;
+}
+
+void UDoNotSmokeFlightHUDWidget::StartCountdown()
+{
+	CountdownElapsed = 0.0f;
+	bCountdownGoSent = false;
+	ControlsPanelAge = -1.0f;
+	if (ControlsPanel)
+	{
+		ControlsPanel->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UDoNotSmokeFlightHUDWidget::TickCountdown(float DeltaTime)
+{
+	if (!CountdownText || CountdownElapsed < 0.0f)
+	{
+		return;
+	}
+
+	CountdownElapsed += DeltaTime;
+	const float Step = FMath::Max(CountdownStepSeconds, 0.1f);
+	const float GoStart = Step * 3.0f;
+
+	if (CountdownElapsed >= GoStart + CountdownGoHoldSeconds)
+	{
+		CountdownText->SetVisibility(ESlateVisibility::Collapsed);
+		CountdownElapsed = -1.0f;
+		return;
+	}
+
+	FText Label;
+	float LocalAlpha = 0.0f;
+	float Opacity = 1.0f;
+	if (CountdownElapsed < GoStart)
+	{
+		const int32 Index = FMath::FloorToInt(CountdownElapsed / Step);
+		Label = FText::AsNumber(3 - Index);
+		LocalAlpha = (CountdownElapsed - Index * Step) / Step;
+		Opacity = 1.0f - FMath::Clamp((LocalAlpha - 0.75f) / 0.25f, 0.0f, 1.0f);
+	}
+	else
+	{
+		Label = DoNotSmokeLocale::Text(TEXT("CountdownGo"));
+		LocalAlpha = (CountdownElapsed - GoStart) / FMath::Max(CountdownGoHoldSeconds, 0.1f);
+		Opacity = 1.0f - FMath::Clamp((LocalAlpha - 0.6f) / 0.4f, 0.0f, 1.0f);
+
+		if (!bCountdownGoSent)
+		{
+			bCountdownGoSent = true;
+			ControlsPanelAge = 0.0f;
+			if (ADoNotSmokeGameMode* GM = Cast<ADoNotSmokeGameMode>(UGameplayStatics::GetGameMode(this)))
+			{
+				GM->HandleCountdownFinished();
+			}
+		}
+	}
+
+	// Each label pops in large and settles within the first quarter of its step
+	const float Pop = 1.0f - FMath::Pow(1.0f - FMath::Clamp(LocalAlpha / 0.25f, 0.0f, 1.0f), 3.0f);
+	const float Scale = FMath::Lerp(1.7f, 1.0f, Pop);
+
+	CountdownText->SetText(Label);
+	CountdownText->SetRenderScale(FVector2D(Scale, Scale));
+	CountdownText->SetRenderOpacity(Opacity);
+	CountdownText->SetVisibility(ESlateVisibility::HitTestInvisible);
+}
+
+void UDoNotSmokeFlightHUDWidget::TickControlsPanel(float DeltaTime)
+{
+	if (!ControlsPanel || ControlsPanelAge < 0.0f)
+	{
+		return;
+	}
+
+	ControlsPanelAge += DeltaTime;
+	const float FadeAlpha = (ControlsPanelAge - ControlsPanelSeconds) / FMath::Max(ControlsPanelFadeSeconds, 0.1f);
+	if (FadeAlpha >= 1.0f)
+	{
+		ControlsPanel->SetVisibility(ESlateVisibility::Collapsed);
+		ControlsPanelAge = -1.0f;
+		return;
+	}
+
+	ControlsPanel->SetRenderOpacity(1.0f - FMath::Clamp(FadeAlpha, 0.0f, 1.0f));
+	ControlsPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
 void UDoNotSmokeFlightHUDWidget::CreateProgressMaterials()
@@ -302,6 +502,10 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 
 	BlinkTime += InDeltaTime;
 
+	// Widgets tick on real time, so the countdown runs while the level is still paused
+	TickCountdown(InDeltaTime);
+	TickControlsPanel(InDeltaTime);
+
 	if (!CachedGlider.IsValid())
 	{
 		CachedGlider = Cast<AGliderPawn>(GetOwningPlayerPawn());
@@ -341,12 +545,11 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 		{
 			const FString Stars = MakeStarString(GM->CalculateStarRating());
 
-			const FString Msg = FString::Printf(
-				TEXT("STACKS %d/%d  SUN %.0f%%  %s"),
+			const FString Msg = DoNotSmokeLocale::Format(TEXT("HudStatus"), {
 				GM->GetOpenSmokestackCount(),
 				GM->GetTotalSmokestackCount(),
-				GM->GetSunPocketOpenRatio() * 100.0f,
-				*Stars);
+				FString::Printf(TEXT("%.0f"), GM->GetSunPocketOpenRatio() * 100.0f),
+				Stars }).ToString();
 			if (Msg != LastStatusText)
 			{
 				LastStatusText = Msg;
@@ -356,7 +559,9 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 
 		if (CarbonStatusText)
 		{
-			const FString CarbonMsg = FString::Printf(TEXT("CO2 %.0f / %.0f kg"), GM->GetCumulativeCarbonKg(), GM->GetTargetMinCarbonKg());
+			const FString CarbonMsg = DoNotSmokeLocale::Format(TEXT("HudCarbon"), {
+				FString::Printf(TEXT("%.0f"), GM->GetCumulativeCarbonKg()),
+				FString::Printf(TEXT("%.0f"), GM->GetTargetMinCarbonKg()) }).ToString();
 			if (CarbonMsg != LastCarbonText)
 			{
 				LastCarbonText = CarbonMsg;
@@ -563,7 +768,7 @@ void UDoNotSmokeCrashWidget::BuildFallbackWidgetTree()
 	}
 
 	RestartText = MakeText(WidgetTree, TEXT("RestartText"), 30, FLinearColor(0.12f, 0.13f, 0.16f, 1.0f));
-	RestartText->SetText(FText::FromString(TEXT("RESTART  [R]")));
+	RestartText->SetText(DoNotSmokeLocale::Text(TEXT("CrashRestart")));
 	RestartButton->AddChild(RestartText);
 
 	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(RestartButton))
@@ -579,17 +784,17 @@ void UDoNotSmokeCrashWidget::BuildFallbackWidgetTree()
 void UDoNotSmokeCrashWidget::SetCrashCause(EGliderCrashCause Cause)
 {
 	UTexture2D* Icon = GroundCrashTexture;
-	FString Label = TEXT("GROUND IMPACT");
+	const TCHAR* LabelKey = TEXT("CrashGround");
 
 	switch (Cause)
 	{
 	case EGliderCrashCause::Smokestack:
 		Icon = SmokestackCrashTexture;
-		Label = TEXT("SMOKESTACK COLLISION");
+		LabelKey = TEXT("CrashSmokestack");
 		break;
 	case EGliderCrashCause::ToxicPlume:
 		Icon = ToxicPlumeCrashTexture;
-		Label = TEXT("CHOKED IN TOXIC PLUME");
+		LabelKey = TEXT("CrashToxicPlume");
 		break;
 	default:
 		break;
@@ -601,7 +806,7 @@ void UDoNotSmokeCrashWidget::SetCrashCause(EGliderCrashCause Cause)
 	}
 	if (CauseText)
 	{
-		CauseText->SetText(FText::FromString(Label));
+		CauseText->SetText(DoNotSmokeLocale::Text(LabelKey));
 	}
 }
 
@@ -657,13 +862,6 @@ namespace NewspaperLayout
 		Box->SetVerticalAlignment(VAlign_Center);
 		Box->SetContent(Content);
 		return Box;
-	}
-
-	static void SetBold(UTextBlock* Text)
-	{
-		FSlateFontInfo Font = Text->GetFont();
-		Font.TypefaceFontName = TEXT("Bold");
-		Text->SetFont(Font);
 	}
 }
 
@@ -750,11 +948,11 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 
 	UTextBlock* Masthead = MakeText(WidgetTree, TEXT("MastheadText"), 34, FLinearColor(0.95f, 0.93f, 0.88f, 1.0f));
 	SetBold(Masthead);
-	Masthead->SetText(FText::FromString(TEXT("THE DAILY SMOG")));
+	Masthead->SetText(DoNotSmokeLocale::Text(TEXT("PaperMasthead")));
 	Place(PagePanel, MakeCentredBox(WidgetTree, TEXT("MastheadBox"), Masthead), 205.0f, 42.0f, 705.0f, 148.0f);
 
 	UTextBlock* Edition = MakeText(WidgetTree, TEXT("EditionText"), 10, InkColor);
-	Edition->SetText(FText::FromString(TEXT("COP31 CLIMATE SUMMIT  ·  SPECIAL EDITION")));
+	Edition->SetText(DoNotSmokeLocale::Text(TEXT("PaperEdition")));
 	Place(PagePanel, MakeCentredBox(WidgetTree, TEXT("EditionBox"), Edition), 56.0f, 180.0f, 745.0f, 200.0f);
 
 	// 4. Headline
@@ -780,7 +978,7 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	// 6. Audit box (dashed frame): stars, CO2 vs C_min, time, accuracy
 	UTextBlock* AuditTab = MakeText(WidgetTree, TEXT("AuditTabText"), 10, FLinearColor(0.95f, 0.93f, 0.88f, 1.0f));
 	SetBold(AuditTab);
-	AuditTab->SetText(FText::FromString(TEXT("AUDIT")));
+	AuditTab->SetText(DoNotSmokeLocale::Text(TEXT("PaperAudit")));
 	Place(PagePanel, MakeCentredBox(WidgetTree, TEXT("AuditTabBox"), AuditTab), 344.0f, 604.0f, 410.0f, 632.0f);
 
 	UVerticalBox* AuditList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("AuditList"));
@@ -820,7 +1018,7 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	// 7. Footer strip: restart prompt
 	UTextBlock* Footer = MakeText(WidgetTree, TEXT("FooterText"), 14, InkColor);
 	SetBold(Footer);
-	Footer->SetText(FText::FromString(TEXT("[R]  RESTART SECTOR")));
+	Footer->SetText(DoNotSmokeLocale::Text(TEXT("PaperFooter")));
 	Place(PagePanel, MakeCentredBox(WidgetTree, TEXT("FooterBox"), Footer), 95.0f, 885.0f, 657.0f, 930.0f);
 
 	// 8. Confetti layer above the page, centred so piece positions are offsets from screen centre
@@ -889,15 +1087,15 @@ void UDoNotSmokeSummaryWidget::SetupSummaryData(int32 InStars, float InCarbonKg,
 	}
 	if (CarbonText)
 	{
-		CarbonText->SetText(FText::FromString(FString::Printf(TEXT("CO2  %.0f kg  /  target %.0f kg"), InCarbonKg, InTargetCarbonKg)));
+		CarbonText->SetText(DoNotSmokeLocale::Format(TEXT("PaperCarbon"), { FString::Printf(TEXT("%.0f"), InCarbonKg), FString::Printf(TEXT("%.0f"), InTargetCarbonKg) }));
 	}
 	if (TimeText)
 	{
-		TimeText->SetText(FText::FromString(FString::Printf(TEXT("TIME  %.1f s"), InTimeSeconds)));
+		TimeText->SetText(DoNotSmokeLocale::Format(TEXT("PaperTime"), { FString::Printf(TEXT("%.1f"), InTimeSeconds) }));
 	}
 	if (AccuracyText)
 	{
-		AccuracyText->SetText(FText::FromString(FString::Printf(TEXT("SEAL ACCURACY  %.0f%%"), InAccuracyPercent)));
+		AccuracyText->SetText(DoNotSmokeLocale::Format(TEXT("PaperAccuracy"), { FString::Printf(TEXT("%.0f"), InAccuracyPercent) }));
 	}
 	if (PhotoImage && ValleyPhotoTextures.IsValidIndex(Stars - 1) && ValleyPhotoTextures[Stars - 1])
 	{
@@ -992,6 +1190,156 @@ void UDoNotSmokeSummaryWidget::TickConfetti(float DeltaTime)
 }
 
 // ==========================================
+// UDoNotSmokeMainMenuWidget Implementation
+// ==========================================
+
+UDoNotSmokeMainMenuWidget::UDoNotSmokeMainMenuWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	using namespace DoNotSmokeUI;
+	ProhibitionTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Prohibition.T_UI_Prohibition"));
+	StackPuffTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_StackPuff.T_UI_StackPuff"));
+
+	SetIsFocusable(true);
+}
+
+void UDoNotSmokeMainMenuWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+	BuildFallbackWidgetTree();
+
+	if (PlayButton)
+	{
+		PlayButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeMainMenuWidget::HandlePlayClicked);
+	}
+	if (LanguageButton)
+	{
+		LanguageButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeMainMenuWidget::HandleLanguageClicked);
+	}
+	if (QuitButton)
+	{
+		QuitButton->OnClicked.AddUniqueDynamic(this, &UDoNotSmokeMainMenuWidget::HandleQuitClicked);
+	}
+}
+
+TSharedRef<SWidget> UDoNotSmokeMainMenuWidget::RebuildWidget()
+{
+	BuildFallbackWidgetTree();
+	return Super::RebuildWidget();
+}
+
+void UDoNotSmokeMainMenuWidget::BuildFallbackWidgetTree()
+{
+	using namespace DoNotSmokeUI;
+
+	if (bBuiltFallbackTree)
+	{
+		return;
+	}
+
+	if (!WidgetTree)
+	{
+		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
+	}
+
+	if (WidgetTree->RootWidget != nullptr)
+	{
+		bBuiltFallbackTree = true;
+		return;
+	}
+
+	UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("MenuRootCanvas"));
+	WidgetTree->RootWidget = RootCanvas;
+
+	const FVector2D Centered(0.5f, 0.5f);
+
+	// 1. Dim the paused valley behind the menu
+	UImage* Backdrop = AddImage(WidgetTree, RootCanvas, TEXT("MenuBackdrop"), nullptr, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector);
+	Backdrop->SetColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f));
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Backdrop->Slot))
+	{
+		CanvasSlot->SetOffsets(FMargin(0.0f));
+	}
+
+	// 2. Logo: chimney under the prohibition sign, as on the newspaper masthead
+	const FAnchors LogoAnchor(0.5f, 0.18f);
+	AddImage(WidgetTree, RootCanvas, TEXT("MenuLogoStack"), StackPuffTexture, LogoAnchor, Centered, FVector2D(0.0f, 8.0f), FVector2D(170.0f, 184.0f));
+	AddImage(WidgetTree, RootCanvas, TEXT("MenuLogoSign"), ProhibitionTexture, LogoAnchor, Centered, FVector2D::ZeroVector, FVector2D(220.0f, 220.0f));
+
+	// 3. Title + tagline
+	UTextBlock* Title = MakeText(WidgetTree, TEXT("MenuTitle"), 76, FLinearColor(0.97f, 0.95f, 0.9f, 1.0f));
+	SetBold(Title);
+	Title->SetText(FText::FromString(TEXT("DO NOT SMOKE")));
+	AddText(RootCanvas, Title, FAnchors(0.5f, 0.38f), FVector2D::ZeroVector);
+
+	TaglineText = MakeText(WidgetTree, TEXT("MenuTagline"), 22, FLinearColor(1.0f, 0.86f, 0.25f, 1.0f));
+	AddText(RootCanvas, TaglineText, FAnchors(0.5f, 0.38f), FVector2D(0.0f, 72.0f));
+
+	// 4. Buttons
+	// Buttons share one anchor and step down by a fixed pixel gap, so they never overlap on short viewports
+	const FAnchors ButtonAnchor(0.5f, 0.55f);
+	auto AddMenuButton = [&](const FName Name, const FLinearColor& Color, int32 Row, TObjectPtr<UTextBlock>& OutLabel) -> UButton*
+	{
+		OutLabel = MakeText(WidgetTree, NAME_None, 28, FLinearColor(0.97f, 0.97f, 0.97f, 1.0f));
+		SetBold(OutLabel);
+		UButton* Button = MakeFlatButton(WidgetTree, Name, Color, OutLabel);
+		if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(Button))
+		{
+			CanvasSlot->SetAnchors(ButtonAnchor);
+			CanvasSlot->SetAlignment(Centered);
+			CanvasSlot->SetPosition(FVector2D(0.0f, Row * 96.0f));
+			CanvasSlot->SetSize(FVector2D(400.0f, 76.0f));
+		}
+		return Button;
+	};
+
+	PlayButton = AddMenuButton(TEXT("PlayButton"), FLinearColor(0.16f, 0.55f, 0.28f, 0.95f), 0, PlayText);
+	LanguageButton = AddMenuButton(TEXT("LanguageButton"), FLinearColor(0.2f, 0.32f, 0.5f, 0.95f), 1, LanguageText);
+	QuitButton = AddMenuButton(TEXT("QuitButton"), FLinearColor(0.55f, 0.17f, 0.15f, 0.95f), 2, QuitText);
+
+	RefreshTexts();
+	bBuiltFallbackTree = true;
+}
+
+void UDoNotSmokeMainMenuWidget::RefreshTexts()
+{
+	if (TaglineText) { TaglineText->SetText(DoNotSmokeLocale::Text(TEXT("MenuTagline"))); }
+	if (PlayText) { PlayText->SetText(DoNotSmokeLocale::Text(TEXT("MenuPlay"))); }
+	if (LanguageText) { LanguageText->SetText(DoNotSmokeLocale::Text(TEXT("MenuLanguage"))); }
+	if (QuitText) { QuitText->SetText(DoNotSmokeLocale::Text(TEXT("MenuQuit"))); }
+}
+
+FReply UDoNotSmokeMainMenuWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	const FKey Key = InKeyEvent.GetKey();
+	if (Key == EKeys::Enter || Key == EKeys::SpaceBar)
+	{
+		HandlePlayClicked();
+		return FReply::Handled();
+	}
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+void UDoNotSmokeMainMenuWidget::HandlePlayClicked()
+{
+	if (ADoNotSmokeGameMode* GM = Cast<ADoNotSmokeGameMode>(UGameplayStatics::GetGameMode(this)))
+	{
+		GM->StartFlightFromMenu();
+	}
+}
+
+void UDoNotSmokeMainMenuWidget::HandleLanguageClicked()
+{
+	DoNotSmokeLocale::CycleLanguage();
+	RefreshTexts();
+}
+
+void UDoNotSmokeMainMenuWidget::HandleQuitClicked()
+{
+	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
+}
+
+// ==========================================
 // ADoNotSmokeGameMode Implementation
 // ==========================================
 
@@ -1003,6 +1351,13 @@ ADoNotSmokeGameMode::ADoNotSmokeGameMode()
 	FlightHUDWidgetClass = UDoNotSmokeFlightHUDWidget::StaticClass();
 	SummaryWidgetClass = UDoNotSmokeSummaryWidget::StaticClass();
 	CrashWidgetClass = UDoNotSmokeCrashWidget::StaticClass();
+	MainMenuWidgetClass = UDoNotSmokeMainMenuWidget::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> LevelMusicAsset(TEXT("/Game/Game/Audio/MUS_Level01.MUS_Level01"));
+	if (LevelMusicAsset.Succeeded())
+	{
+		LevelMusic = LevelMusicAsset.Object;
+	}
 
 	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> SunRainAsset(TEXT("/Game/Game/VFX/NS_SunMotes.NS_SunMotes"));
 	if (SunRainAsset.Succeeded())
@@ -1079,19 +1434,114 @@ void ADoNotSmokeGameMode::BeginPlay()
 		}
 	}
 
-	// Automatically create and AddToViewport the FlightHUDWidget
-	TSubclassOf<UDoNotSmokeFlightHUDWidget> TargetHUDClass = FlightHUDWidgetClass;
-	if (!TargetHUDClass)
+	if (LevelMusic)
 	{
-		TargetHUDClass = UDoNotSmokeFlightHUDWidget::StaticClass();
+		LevelMusicAudio = UGameplayStatics::CreateSound2D(this, LevelMusic, LevelMusicVolume);
+		if (LevelMusicAudio)
+		{
+			LevelMusicAudio->bIsUISound = true;
+			LevelMusicAudio->OnAudioFinished.AddDynamic(this, &ADoNotSmokeGameMode::HandleLevelMusicFinished);
+			LevelMusicAudio->Play();
+		}
 	}
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+
+	// The level waits frozen behind the title screen; a restart skips straight to the countdown
+	bFlightStarted = false;
+	World->GetTimerManager().SetTimer(PreFlightFreezeTimerHandle, this, &ADoNotSmokeGameMode::FreezeForPreFlight, 0.1f, false);
+	if (UGameplayStatics::HasOption(OptionsString, TEXT("SkipMenu")))
 	{
+		BeginCountdown();
+	}
+	else
+	{
+		ShowMainMenu();
+	}
+}
+
+void ADoNotSmokeGameMode::ShowMainMenu()
+{
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	TSubclassOf<UDoNotSmokeMainMenuWidget> TargetMenuClass = MainMenuWidgetClass ? MainMenuWidgetClass : TSubclassOf<UDoNotSmokeMainMenuWidget>(UDoNotSmokeMainMenuWidget::StaticClass());
+	MainMenuWidget = PC ? CreateWidget<UDoNotSmokeMainMenuWidget>(PC, TargetMenuClass) : nullptr;
+	if (!MainMenuWidget)
+	{
+		BeginCountdown();
+		return;
+	}
+
+	MainMenuWidget->AddToViewport(40);
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(MainMenuWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PC->SetInputMode(InputMode);
+	PC->SetShowMouseCursor(true);
+}
+
+void ADoNotSmokeGameMode::StartFlightFromMenu()
+{
+	if (MainMenuWidget)
+	{
+		MainMenuWidget->RemoveFromParent();
+		MainMenuWidget = nullptr;
+	}
+	BeginCountdown();
+}
+
+void ADoNotSmokeGameMode::BeginCountdown()
+{
+	// The HUD is created only now so its texts use the language picked on the title screen
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!PC)
+	{
+		HandleCountdownFinished();
+		return;
+	}
+
+	if (!FlightHUDWidget)
+	{
+		TSubclassOf<UDoNotSmokeFlightHUDWidget> TargetHUDClass = FlightHUDWidgetClass ? FlightHUDWidgetClass : TSubclassOf<UDoNotSmokeFlightHUDWidget>(UDoNotSmokeFlightHUDWidget::StaticClass());
 		FlightHUDWidget = CreateWidget<UDoNotSmokeFlightHUDWidget>(PC, TargetHUDClass);
 		if (FlightHUDWidget)
 		{
 			FlightHUDWidget->AddToViewport(10);
 		}
+	}
+
+	PC->SetInputMode(FInputModeGameOnly());
+	PC->SetShowMouseCursor(false);
+
+	if (FlightHUDWidget)
+	{
+		FlightHUDWidget->StartCountdown();
+	}
+	else
+	{
+		HandleCountdownFinished();
+	}
+}
+
+void ADoNotSmokeGameMode::FreezeForPreFlight()
+{
+	if (!bFlightStarted)
+	{
+		UGameplayStatics::SetGamePaused(GetWorld(), true);
+	}
+}
+
+void ADoNotSmokeGameMode::HandleCountdownFinished()
+{
+	bFlightStarted = true;
+	GetWorldTimerManager().ClearTimer(PreFlightFreezeTimerHandle);
+	UGameplayStatics::SetGamePaused(GetWorld(), false);
+}
+
+void ADoNotSmokeGameMode::HandleLevelMusicFinished()
+{
+	// Keeps the track going even if the imported wave is not flagged as looping
+	if (LevelMusicAudio)
+	{
+		LevelMusicAudio->Play();
 	}
 }
 
@@ -1099,7 +1549,7 @@ void ADoNotSmokeGameMode::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bIsLevelCompleted || bHasGliderCrashed)
+	if (!bFlightStarted || bIsLevelCompleted || bHasGliderCrashed)
 	{
 		return;
 	}
@@ -1154,11 +1604,11 @@ FText ADoNotSmokeGameMode::GetNewspaperHeadlineForStars(int32 StarCount) const
 	switch (StarCount)
 	{
 	case 3:
-		return FText::FromString(TEXT("GÖKYÜZÜ NEFES ALDI: GİZEMLİ PLANÖR SANAYİ BACALARINI KAYNAĞINDA MÜHÜRLEDİ!"));
+		return DoNotSmokeLocale::Text(TEXT("Headline3"));
 	case 2:
-		return FText::FromString(TEXT("EMİSYONLAR FRENLENDİ AMA KARBON BULUTU TAM DAĞILMADI"));
+		return DoNotSmokeLocale::Text(TEXT("Headline2"));
 	default:
-		return FText::FromString(TEXT("KIL PAYI KURTULUŞ: BACALAR KAPANDI AMA ŞEHİR İS YUTTU"));
+		return DoNotSmokeLocale::Text(TEXT("Headline1"));
 	}
 }
 
@@ -1204,8 +1654,8 @@ void ADoNotSmokeGameMode::BuildSunRainGrid()
 			{
 				// NS_SunMotes reuses NS_SkySmog's user parameters: cylinder radius, spawn rate, sprite size multiplier
 				Cell->SetVariableFloat(TEXT("SpreadRadius"), SunRainCellSize * 0.6f);
-				Cell->SetVariableFloat(TEXT("SpawnRate"), 2.0f);
-				Cell->SetVariableFloat(TEXT("SizeScale"), 0.3f);
+				Cell->SetVariableFloat(TEXT("SpawnRate"), SunRainSpawnRate);
+				Cell->SetVariableFloat(TEXT("SizeScale"), SunRainSizeScale);
 				SunRainCells.Add(Cell);
 			}
 		}
@@ -1358,7 +1808,7 @@ void ADoNotSmokeGameMode::TriggerInstantRestart()
 
 		UGameplayStatics::SetGamePaused(World, false);
 		const FString CurrentMapName = UGameplayStatics::GetCurrentLevelName(World, true);
-		UGameplayStatics::OpenLevel(World, FName(*CurrentMapName));
+		UGameplayStatics::OpenLevel(World, FName(*CurrentMapName), true, TEXT("SkipMenu"));
 	}
 }
 

@@ -3,6 +3,7 @@
 #include "GliderPawn.h"
 #include "CarbonSealProjectile.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
@@ -13,6 +14,7 @@
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -70,6 +72,38 @@ AGliderPawn::AGliderPawn()
 	SolarBoostVFX->SetupAttachment(GliderMesh);
 	SolarBoostVFX->bAutoActivate = false;
 
+	WindAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("WindAudio"));
+	WindAudio->SetupAttachment(GliderCollisionSphere);
+	WindAudio->bAutoActivate = false;
+
+	PullUpAlarmAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("PullUpAlarmAudio"));
+	PullUpAlarmAudio->SetupAttachment(GliderCollisionSphere);
+	PullUpAlarmAudio->bAutoActivate = false;
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> WindAsset(TEXT("/Game/Game/Audio/SFX_Wind_Loop.SFX_Wind_Loop"));
+	if (WindAsset.Succeeded())
+	{
+		WindAudio->SetSound(WindAsset.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> PullUpAlarmAsset(TEXT("/Game/Game/Audio/SFX_PullUp_Alarm.SFX_PullUp_Alarm"));
+	if (PullUpAlarmAsset.Succeeded())
+	{
+		PullUpAlarmAudio->SetSound(PullUpAlarmAsset.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> SealFireAsset(TEXT("/Game/Game/Audio/SFX_Seal_Fire.SFX_Seal_Fire"));
+	if (SealFireAsset.Succeeded())
+	{
+		SealFireSound = SealFireAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> SolarBoostAsset(TEXT("/Game/Game/Audio/SFX_Solar_Boost.SFX_Solar_Boost"));
+	if (SolarBoostAsset.Succeeded())
+	{
+		SolarBoostSound = SolarBoostAsset.Object;
+	}
+
 	CarbonSealProjectileClass = ACarbonSealProjectile::StaticClass();
 }
 
@@ -93,6 +127,9 @@ void AGliderPawn::BeginPlay()
 
 	if (CameraBoom)
 	{
+		// Lag would ease the camera out from the pivot over several frames, but the level pauses right after spawning for the title screen;
+		// the first Tick places the arm at once and turns lag back on
+		CameraBoom->bEnableCameraLag = false;
 		CameraBoom->SetUsingAbsoluteRotation(true);
 		CameraBoom->TargetArmLength = CameraArmLength;
 		CameraBoom->SocketOffset = FVector(0.0f, 0.0f, CameraSocketHeightOffset);
@@ -135,6 +172,12 @@ void AGliderPawn::BeginPlay()
 	}
 
 	PerformSunlightTrace();
+
+	if (WindAudio)
+	{
+		WindAudio->Play();
+		UpdateWindAudio();
+	}
 }
 
 void AGliderPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -178,6 +221,11 @@ void AGliderPawn::Tick(float DeltaTime)
 		return;
 	}
 
+	if (CameraBoom && !CameraBoom->bEnableCameraLag)
+	{
+		CameraBoom->bEnableCameraLag = true;
+	}
+
 	if (SealCooldownRemaining > 0.0f)
 	{
 		SealCooldownRemaining = FMath::Max(0.0f, SealCooldownRemaining - DeltaTime);
@@ -186,6 +234,7 @@ void AGliderPawn::Tick(float DeltaTime)
 	UpdateSolarEnergyAndAltitudeChecks(DeltaTime);
 	UpdateFlightKinematics(DeltaTime);
 	UpdateDecoupledCamera(DeltaTime);
+	UpdateWindAudio();
 
 	// Compute aim direction unconditionally every frame so CachedAimWorldTarget,
 	// bIsAimClampedToCone, and bHasMagneticRimLock are kept live for UMG HUD & targeting
@@ -285,6 +334,10 @@ void AGliderPawn::FireCarbonSeal()
 	{
 		Projectile->InitializeLaunch(LaunchDir, MagneticTarget, MagneticRimLocation);
 		SealCooldownRemaining = SealCooldownDuration;
+		if (SealFireSound)
+		{
+			UGameplayStatics::PlaySound2D(this, SealFireSound);
+		}
 		OnCarbonSealFired.Broadcast();
 		BP_OnCarbonSealFired(LaunchDir);
 	}
@@ -409,13 +462,8 @@ void AGliderPawn::UpdateSolarEnergyAndAltitudeChecks(float DeltaTime)
 		return;
 	}
 
-	// 2. Pull-Up Warning (600u) state check
-	const bool bShouldWarnPullUp = (CurrentZ < PullUpWarningAltitude);
-	if (bShouldWarnPullUp != bIsPullUpWarningActive)
-	{
-		bIsPullUpWarningActive = bShouldWarnPullUp;
-		OnPullUpWarningChanged.Broadcast(bIsPullUpWarningActive);
-	}
+	// 2. Pull-Up Warning (1200u) state check
+	SetPullUpWarningActive(CurrentZ < PullUpWarningAltitude);
 
 	// 3. Solar Boost vs Binary Solar Charge (+12.5%/s in sunlight, 0%/s in smog)
 	const bool bWasBoosting = bIsSolarBoosting;
@@ -440,6 +488,10 @@ void AGliderPawn::UpdateSolarEnergyAndAltitudeChecks(float DeltaTime)
 
 	if (bWasBoosting != bIsSolarBoosting)
 	{
+		if (bIsSolarBoosting && SolarBoostSound)
+		{
+			UGameplayStatics::PlaySound2D(this, SolarBoostSound);
+		}
 		if (SolarBoostVFX)
 		{
 			if (bIsSolarBoosting)
@@ -639,10 +691,11 @@ void AGliderPawn::TriggerCrash(EGliderCrashCause Cause)
 		World->GetTimerManager().ClearTimer(SunlightTraceTimerHandle);
 	}
 
-	if (bIsPullUpWarningActive)
+	SetPullUpWarningActive(false);
+
+	if (WindAudio)
 	{
-		bIsPullUpWarningActive = false;
-		OnPullUpWarningChanged.Broadcast(false);
+		WindAudio->FadeOut(0.4f, 0.0f);
 	}
 
 	const bool bWasBoosting = bIsSolarBoosting;
@@ -721,4 +774,39 @@ void AGliderPawn::HandleGliderHit(
 	{
 		TriggerCrash(EGliderCrashCause::Ground);
 	}
+}
+
+void AGliderPawn::UpdateWindAudio()
+{
+	if (!WindAudio)
+	{
+		return;
+	}
+
+	const float SpeedAlpha = FMath::GetRangePct(StallVelocity, MaxDiveVelocity, CurrentSpeed);
+	const float ClampedAlpha = FMath::Clamp(SpeedAlpha, 0.0f, 1.0f);
+	WindAudio->SetVolumeMultiplier(FMath::Lerp(WindVolumeRange.X, WindVolumeRange.Y, ClampedAlpha));
+	WindAudio->SetPitchMultiplier(FMath::Lerp(WindPitchRange.X, WindPitchRange.Y, ClampedAlpha));
+}
+
+void AGliderPawn::SetPullUpWarningActive(bool bActive)
+{
+	if (bActive == bIsPullUpWarningActive)
+	{
+		return;
+	}
+
+	bIsPullUpWarningActive = bActive;
+	if (PullUpAlarmAudio)
+	{
+		if (bActive)
+		{
+			PullUpAlarmAudio->Play();
+		}
+		else
+		{
+			PullUpAlarmAudio->Stop();
+		}
+	}
+	OnPullUpWarningChanged.Broadcast(bIsPullUpWarningActive);
 }

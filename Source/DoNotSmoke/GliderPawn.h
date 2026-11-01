@@ -14,6 +14,8 @@ class USpringArmComponent;
 class UCameraComponent;
 class UNiagaraComponent;
 class ACarbonSealProjectile;
+class UAudioComponent;
+class USoundBase;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPullUpWarningChangedSignature, bool, bIsWarningActive);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGliderCrashedSignature, AActor*, CrashedGlider);
@@ -24,7 +26,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCarbonSealFiredSignature);
  * - Strict net-loss gliding (20:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
  * - Decoupled SpringArm camera look & 135-degree cone clamped projectile aiming with ~10-degree magnetic assist
  * - Periodic 0.2s vertical sunlight LineTrace (binary 12.5%/s charge vs 0%/s under smog)
- * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 600u "PULL UP!" warning, 7800u Max Ceiling
+ * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 1200u "PULL UP!" warning, 7800u Max Ceiling
  */
 UCLASS(Blueprintable)
 class DONOTSMOKE_API AGliderPawn : public APawn
@@ -160,6 +162,30 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Glider|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraComponent> SolarBoostVFX;
 
+	/** Looping airflow (SFX_Wind_Loop); volume and pitch follow airspeed. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Glider|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAudioComponent> WindAudio;
+
+	/** Looping cockpit alarm (SFX_PullUp_Alarm) while the PULL UP! warning is active. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Glider|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAudioComponent> PullUpAlarmAudio;
+
+	// ==========================================
+	// AUDIO (Content/Game/Audio)
+	// ==========================================
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Audio", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USoundBase> SealFireSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Audio", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USoundBase> SolarBoostSound;
+
+	/** Wind volume at stall speed and at max dive speed. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Audio", meta = (AllowPrivateAccess = "true"))
+	FVector2D WindVolumeRange = FVector2D(0.35f, 1.4f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Audio", meta = (AllowPrivateAccess = "true"))
+	FVector2D WindPitchRange = FVector2D(0.85f, 1.25f);
+
 	// ==========================================
 	// ATOMIC FLIGHT & ENERGY PARAMETERS (GDD Sec 3)
 	// ==========================================
@@ -200,7 +226,7 @@ private:
 	float SmogBedCeilingAltitude = 400.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
-	float PullUpWarningAltitude = 600.0f;
+	float PullUpWarningAltitude = 1200.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
 	float GliderMaxCeilingAltitude = 7800.0f;
@@ -307,6 +333,8 @@ private:
 	void UpdateDecoupledCamera(float DeltaTime);
 	void PerformSunlightTrace();
 	void TriggerCrash(EGliderCrashCause Cause);
+	void UpdateWindAudio();
+	void SetPullUpWarningActive(bool bActive);
 
 	FVector ComputeClampedAimDirection(AActor*& OutMagneticTarget, FVector& OutMagneticRimLocation) const;
 

@@ -6,6 +6,9 @@
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "Components/AudioComponent.h"
+#include "DoNotSmokeLocale.h"
+#include "Sound/SoundBase.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -75,11 +78,20 @@ APrivateJet::APrivateJet()
 		JetBannerMesh->SetStaticMesh(PlaneMeshAsset.Object);
 	}
 
-	// Default satirical COP31 greenwashing slogans (GDD Sec 5)
-	BannerSlogans.Add(FText::FromString(TEXT("ON MY WAY TO CLIMATE SUMMIT!")));
-	BannerSlogans.Add(FText::FromString(TEXT("DON'T FORGET YOUR PAPER STRAW!")));
-	BannerSlogans.Add(FText::FromString(TEXT("THOUGHTS & PRAYERS FOR THE PLANET")));
-	BannerSlogans.Add(FText::FromString(TEXT("NET-ZERO BY 2099!")));
+	JetRoarAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("JetRoarAudio"));
+	JetRoarAudio->SetupAttachment(MovingJetCarriage);
+	JetRoarAudio->bAutoActivate = false;
+	// The jet flies ~7 km above the glider, so the falloff is long enough to hear it from the flight band
+	JetRoarAudio->bOverrideAttenuation = true;
+	JetRoarAudio->AttenuationOverrides.bAttenuate = true;
+	JetRoarAudio->AttenuationOverrides.bSpatialize = true;
+	JetRoarAudio->AttenuationOverrides.AttenuationShapeExtents = FVector(6000.0f);
+	JetRoarAudio->AttenuationOverrides.FalloffDistance = 20000.0f;
+	static ConstructorHelpers::FObjectFinder<USoundBase> JetRoarAsset(TEXT("/Game/Game/Audio/SFX_Jet_Roar.SFX_Jet_Roar"));
+	if (JetRoarAsset.Succeeded())
+	{
+		JetRoarAudio->SetSound(JetRoarAsset.Object);
+	}
 }
 
 void APrivateJet::BeginPlay()
@@ -162,11 +174,9 @@ void APrivateJet::Tick(float DeltaTime)
 
 FText APrivateJet::GetCurrentBannerSlogan() const
 {
-	if (BannerSlogans.IsValidIndex(CurrentSloganIndex))
-	{
-		return BannerSlogans[CurrentSloganIndex];
-	}
-	return BannerSlogans.IsValidIndex(0) ? BannerSlogans[0] : FText::GetEmpty();
+	// Satirical COP31 greenwashing slogans (GDD Sec 5), looked up per pass so a language change applies at once
+	const int32 Index = FMath::Clamp(CurrentSloganIndex, 0, DoNotSmokeLocale::JetSloganCount - 1);
+	return DoNotSmokeLocale::Text(*FString::Printf(TEXT("JetSlogan%d"), Index));
 }
 
 bool APrivateJet::IsLethalCrashHazard_Implementation(const UPrimitiveComponent* HazardComponent) const
@@ -191,10 +201,7 @@ void APrivateJet::BeginApproachWarning()
 	WaitTimer = ApproachWarningLeadSeconds;
 
 	const FText ActiveSlogan = GetCurrentBannerSlogan();
-	if (BannerSlogans.Num() > 0)
-	{
-		CurrentSloganIndex = (CurrentSloganIndex + 1) % BannerSlogans.Num();
-	}
+	CurrentSloganIndex = (CurrentSloganIndex + 1) % DoNotSmokeLocale::JetSloganCount;
 
 	if (BannerTextRender)
 	{
@@ -231,6 +238,11 @@ void APrivateJet::StartFlybyPass()
 	if (JetWakeVFX)
 	{
 		JetWakeVFX->Activate(true);
+	}
+
+	if (JetRoarAudio)
+	{
+		JetRoarAudio->Play();
 	}
 }
 
