@@ -30,6 +30,7 @@
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
+#include "Components/Overlay.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -148,6 +149,7 @@ namespace HUDLayout
 {
 	static const FVector2D CrosshairSize(100.0f, 100.0f);
 	static const FVector2D CooldownRingSize(60.0f, 60.0f);
+	static const FVector2D ControlsRingSize(40.0f, 40.0f);
 
 	static const FVector2D BatterySize(340.0f, 340.0f);
 	static const FVector2D BatteryPosition(-97.0f, 0.0f);
@@ -314,7 +316,7 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 
 	UVerticalBox* Rows = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ControlsRows"));
 
-	UTextBlock* Title = MakeText(WidgetTree, TEXT("ControlsTitle"), 18, KeyColor);
+	UTextBlock* Title = MakeText(WidgetTree, TEXT("ControlsTitle"), 22, KeyColor);
 	SetBold(Title);
 	Title->SetJustification(ETextJustify::Left);
 	Title->SetText(DoNotSmokeLocale::Text(TEXT("CtrlTitle")));
@@ -333,30 +335,53 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 
 		USizeBox* KeyBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-		KeyBox->SetWidthOverride(160.0f);
-		UTextBlock* KeyText = MakeText(WidgetTree, NAME_None, 15, KeyColor);
+		KeyBox->SetWidthOverride(192.0f);
+		UTextBlock* KeyText = MakeText(WidgetTree, NAME_None, 18, KeyColor);
 		SetBold(KeyText);
 		KeyText->SetJustification(ETextJustify::Left);
 		KeyText->SetText(DoNotSmokeLocale::Text(RowKey[0]));
 		KeyBox->AddChild(KeyText);
 		Row->AddChildToHorizontalBox(KeyBox);
 
-		UTextBlock* ActionText = MakeText(WidgetTree, NAME_None, 15, ActionColor);
+		UTextBlock* ActionText = MakeText(WidgetTree, NAME_None, 18, ActionColor);
 		ActionText->SetJustification(ETextJustify::Left);
 		ActionText->SetText(DoNotSmokeLocale::Text(RowKey[1]));
 		Row->AddChildToHorizontalBox(ActionText);
 
-		Rows->AddChildToVerticalBox(Row)->SetPadding(FMargin(0.0f, 2.0f));
+		Rows->AddChildToVerticalBox(Row)->SetPadding(FMargin(0.0f, 2.4f));
 	}
 
-	UTextBlock* Hint = MakeText(WidgetTree, TEXT("ControlsHint"), 13, FLinearColor(0.7f, 0.85f, 1.0f, 1.0f));
+	// Last row: hint on the left, draining timer ring in the bottom-right corner (same ring art as the seal cooldown)
+	UHorizontalBox* HintRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ControlsHintRow"));
+	UTextBlock* Hint = MakeText(WidgetTree, TEXT("ControlsHint"), 16, FLinearColor(0.7f, 0.85f, 1.0f, 1.0f));
 	Hint->SetJustification(ETextJustify::Left);
 	Hint->SetText(DoNotSmokeLocale::Text(TEXT("CtrlHint")));
-	Rows->AddChildToVerticalBox(Hint)->SetPadding(FMargin(0.0f, 8.0f, 0.0f, 0.0f));
+	if (UHorizontalBoxSlot* HintSlot = HintRow->AddChildToHorizontalBox(Hint))
+	{
+		HintSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		HintSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
+	UOverlay* RingStack = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ControlsRingStack"));
+	UImage* RingBase = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ControlsRingBase"));
+	RingBase->SetBrushFromTexture(RingDarkTexture, false);
+	RingBase->SetDesiredSizeOverride(HUDLayout::ControlsRingSize);
+	RingStack->AddChildToOverlay(RingBase);
+	ControlsRingFill = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ControlsRingFill"));
+	ControlsRingFill->SetBrushFromTexture(RingFillTexture, false);
+	ControlsRingFill->SetDesiredSizeOverride(HUDLayout::ControlsRingSize);
+	RingStack->AddChildToOverlay(ControlsRingFill);
+	if (UHorizontalBoxSlot* RingSlot = HintRow->AddChildToHorizontalBox(RingStack))
+	{
+		RingSlot->SetHorizontalAlignment(HAlign_Right);
+		RingSlot->SetVerticalAlignment(VAlign_Bottom);
+		RingSlot->SetPadding(FMargin(16.0f, 0.0f, 0.0f, 0.0f));
+	}
+	Rows->AddChildToVerticalBox(HintRow)->SetPadding(FMargin(0.0f, 10.0f, 0.0f, 0.0f));
 
 	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ControlsPanel"));
 	Panel->SetBrushColor(FLinearColor(0.02f, 0.03f, 0.05f, 0.6f));
-	Panel->SetPadding(FMargin(18.0f, 14.0f));
+	Panel->SetPadding(FMargin(22.0f, 17.0f));
 	Panel->SetContent(Rows);
 	Panel->SetVisibility(ESlateVisibility::Collapsed);
 	if (UCanvasPanelSlot* CanvasSlot = RootCanvas->AddChildToCanvas(Panel))
@@ -366,6 +391,12 @@ void UDoNotSmokeFlightHUDWidget::BuildControlsPanel(UCanvasPanel* RootCanvas)
 		CanvasSlot->SetAutoSize(true);
 	}
 	ControlsPanel = Panel;
+}
+
+void UDoNotSmokeFlightHUDWidget::RefreshLocalizedTexts()
+{
+	if (JetWarningText) { JetWarningText->SetText(DoNotSmokeLocale::Text(TEXT("HudJetIncoming"))); }
+	if (PullUpWarningText) { PullUpWarningText->SetText(DoNotSmokeLocale::Text(TEXT("HudPullUp"))); }
 }
 
 void UDoNotSmokeFlightHUDWidget::StartCountdown()
@@ -441,8 +472,20 @@ void UDoNotSmokeFlightHUDWidget::TickControlsPanel(float DeltaTime)
 		return;
 	}
 
+	// The panel's timer only runs while flying, not behind the pause menu
+	if (UGameplayStatics::IsGamePaused(this))
+	{
+		return;
+	}
+
+	// The ring drains over the panel's lifetime minus the short fade, so it is empty exactly when the panel starts to go
 	ControlsPanelAge += DeltaTime;
-	const float FadeAlpha = (ControlsPanelAge - ControlsPanelSeconds) / FMath::Max(ControlsPanelFadeSeconds, 0.1f);
+	const float DrainSeconds = FMath::Max(ControlsPanelSeconds - ControlsPanelFadeSeconds, 0.1f);
+	if (ControlsRingMID)
+	{
+		ControlsRingMID->SetScalarParameterValue(TEXT("Progress"), 1.0f - FMath::Clamp(ControlsPanelAge / DrainSeconds, 0.0f, 1.0f));
+	}
+	const float FadeAlpha = (ControlsPanelAge - DrainSeconds) / FMath::Max(ControlsPanelFadeSeconds, 0.1f);
 	if (FadeAlpha >= 1.0f)
 	{
 		ControlsPanel->SetVisibility(ESlateVisibility::Collapsed);
@@ -467,6 +510,16 @@ void UDoNotSmokeFlightHUDWidget::CreateProgressMaterials()
 		CooldownRingMID->SetTextureParameterValue(TEXT("Tex"), RingFillTexture);
 		CooldownRingMID->SetScalarParameterValue(TEXT("Mode"), 0.0f);
 		CooldownRingFill->SetBrushFromMaterial(CooldownRingMID);
+	}
+
+	if (ControlsRingFill && !ControlsRingMID)
+	{
+		ControlsRingMID = UMaterialInstanceDynamic::Create(ProgressMaskMaterial, this);
+		ControlsRingMID->SetTextureParameterValue(TEXT("Tex"), RingFillTexture);
+		ControlsRingMID->SetScalarParameterValue(TEXT("Mode"), 0.0f);
+		ControlsRingMID->SetScalarParameterValue(TEXT("Progress"), 1.0f);
+		ControlsRingFill->SetBrushFromMaterial(ControlsRingMID);
+		ControlsRingFill->SetDesiredSizeOverride(HUDLayout::ControlsRingSize);
 	}
 
 	if (BatteryFill && !BatteryFillMID)
@@ -1250,8 +1303,7 @@ UDoNotSmokeMainMenuWidget::UDoNotSmokeMainMenuWidget(const FObjectInitializer& O
 	: Super(ObjectInitializer)
 {
 	using namespace DoNotSmokeUI;
-	ProhibitionTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_Prohibition.T_UI_Prohibition"));
-	StackPuffTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_StackPuff.T_UI_StackPuff"));
+	GameIconTexture = FindUIAsset<UTexture2D>(TEXT("/Game/Game/UI/Textures/T_UI_GameIcon.T_UI_GameIcon"));
 
 	SetIsFocusable(true);
 }
@@ -1314,10 +1366,8 @@ void UDoNotSmokeMainMenuWidget::BuildFallbackWidgetTree()
 		CanvasSlot->SetOffsets(FMargin(0.0f));
 	}
 
-	// 2. Logo: chimney under the prohibition sign, as on the newspaper masthead
-	const FAnchors LogoAnchor(0.5f, 0.18f);
-	AddImage(WidgetTree, RootCanvas, TEXT("MenuLogoStack"), StackPuffTexture, LogoAnchor, Centered, FVector2D(0.0f, 8.0f), FVector2D(170.0f, 184.0f));
-	AddImage(WidgetTree, RootCanvas, TEXT("MenuLogoSign"), ProhibitionTexture, LogoAnchor, Centered, FVector2D::ZeroVector, FVector2D(220.0f, 220.0f));
+	// 2. Game icon (same art as the exe / window icon)
+	AddImage(WidgetTree, RootCanvas, TEXT("MenuLogo"), GameIconTexture, FAnchors(0.5f, 0.18f), Centered, FVector2D::ZeroVector, FVector2D(230.0f, 230.0f));
 
 	// 3. Title + tagline
 	UTextBlock* Title = MakeText(WidgetTree, TEXT("MenuTitle"), 76, FLinearColor(0.97f, 0.95f, 0.9f, 1.0f));
@@ -1367,16 +1417,17 @@ void UDoNotSmokeMainMenuWidget::BuildFallbackWidgetTree()
 
 void UDoNotSmokeMainMenuWidget::RefreshTexts()
 {
-	if (TaglineText) { TaglineText->SetText(DoNotSmokeLocale::Text(TEXT("MenuTagline"))); }
-	if (PlayText) { PlayText->SetText(DoNotSmokeLocale::Text(TEXT("MenuPlay"))); }
+	const bool bPause = IsPauseMenu();
+	if (TaglineText) { TaglineText->SetText(DoNotSmokeLocale::Text(bPause ? TEXT("PauseTitle") : TEXT("MenuTagline"))); }
+	if (PlayText) { PlayText->SetText(DoNotSmokeLocale::Text(bPause ? TEXT("PauseResume") : TEXT("MenuPlay"))); }
 	if (LanguageText) { LanguageText->SetText(DoNotSmokeLocale::Text(TEXT("MenuLanguage"))); }
-	if (QuitText) { QuitText->SetText(DoNotSmokeLocale::Text(TEXT("MenuQuit"))); }
+	if (QuitText) { QuitText->SetText(DoNotSmokeLocale::Text(bPause ? TEXT("PauseExit") : TEXT("MenuQuit"))); }
 }
 
 FReply UDoNotSmokeMainMenuWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
 	const FKey Key = InKeyEvent.GetKey();
-	if (Key == EKeys::Enter || Key == EKeys::SpaceBar)
+	if (Key == EKeys::Enter || Key == EKeys::SpaceBar || (IsPauseMenu() && Key == EKeys::Escape))
 	{
 		HandlePlayClicked();
 		return FReply::Handled();
@@ -1388,7 +1439,14 @@ void UDoNotSmokeMainMenuWidget::HandlePlayClicked()
 {
 	if (ADoNotSmokeGameMode* GM = Cast<ADoNotSmokeGameMode>(UGameplayStatics::GetGameMode(this)))
 	{
-		GM->StartFlightFromMenu();
+		if (IsPauseMenu())
+		{
+			GM->ResumeFromPause();
+		}
+		else
+		{
+			GM->StartFlightFromMenu();
+		}
 	}
 }
 
@@ -1508,6 +1566,7 @@ void ADoNotSmokeGameMode::BeginPlay()
 			InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ADoNotSmokeGameMode::HandleCheatKeyC);
 			InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ADoNotSmokeGameMode::HandleCheatKeyO);
 			InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ADoNotSmokeGameMode::HandleCheatKeyP);
+			InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ADoNotSmokeGameMode::OpenPauseMenu);
 		}
 	}
 
@@ -1652,6 +1711,62 @@ void ADoNotSmokeGameMode::HandleCountdownFinished()
 	}
 	GetWorldTimerManager().ClearTimer(PreFlightFreezeTimerHandle);
 	UGameplayStatics::SetGamePaused(GetWorld(), false);
+}
+
+void ADoNotSmokeGameMode::OpenPauseMenu()
+{
+	// Only mid-flight: the title screen, countdown, crash screen and newspaper own the screen otherwise
+	if (!bFlightStarted || bIsLevelCompleted || bHasGliderCrashed || PauseMenuWidget)
+	{
+		return;
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	PauseMenuWidget = PC ? CreateWidget<UDoNotSmokePauseMenuWidget>(PC, UDoNotSmokePauseMenuWidget::StaticClass()) : nullptr;
+	if (!PauseMenuWidget)
+	{
+		return;
+	}
+
+	PauseMenuWidget->AddToViewport(40);
+	if (AGliderPawn* Glider = Cast<AGliderPawn>(UGameplayStatics::GetPlayerPawn(GetWorld(), 0)))
+	{
+		Glider->SetMotionBlurSuppressed(true);
+	}
+	UGameplayStatics::SetGamePaused(GetWorld(), true);
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(PauseMenuWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PC->SetInputMode(InputMode);
+	PC->SetShowMouseCursor(true);
+}
+
+void ADoNotSmokeGameMode::ResumeFromPause()
+{
+	if (!PauseMenuWidget)
+	{
+		return;
+	}
+
+	PauseMenuWidget->RemoveFromParent();
+	PauseMenuWidget = nullptr;
+
+	if (FlightHUDWidget)
+	{
+		FlightHUDWidget->RefreshLocalizedTexts();
+	}
+	if (AGliderPawn* Glider = Cast<AGliderPawn>(UGameplayStatics::GetPlayerPawn(GetWorld(), 0)))
+	{
+		Glider->SetMotionBlurSuppressed(false);
+	}
+	UGameplayStatics::SetGamePaused(GetWorld(), false);
+
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+	{
+		PC->SetInputMode(FInputModeGameOnly());
+		PC->SetShowMouseCursor(false);
+	}
 }
 
 void ADoNotSmokeGameMode::HandleLevelMusicFinished()

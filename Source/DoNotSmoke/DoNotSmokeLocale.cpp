@@ -21,6 +21,11 @@ namespace
 		{ TEXT("MenuQuit"), { TEXT("QUIT"), TEXT("ÇIKIŞ"), TEXT("AFSLUITEN") } },
 		{ TEXT("MenuLanguage"), { TEXT("EN"), TEXT("TR"), TEXT("NL") } },
 
+		// Pause menu
+		{ TEXT("PauseTitle"), { TEXT("PAUSED"), TEXT("DURAKLATILDI"), TEXT("GEPAUZEERD") } },
+		{ TEXT("PauseResume"), { TEXT("RESUME"), TEXT("DEVAM ET"), TEXT("HERVATTEN") } },
+		{ TEXT("PauseExit"), { TEXT("EXIT"), TEXT("ÇIKIŞ"), TEXT("AFSLUITEN") } },
+
 		// Countdown
 		{ TEXT("CountdownGo"), { TEXT("RENEW IT!"), TEXT("YENİLE!"), TEXT("VERNIEUW HET!") } },
 

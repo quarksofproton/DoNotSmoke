@@ -41,6 +41,9 @@ public:
 	/** Runs the "3, 2, 1, RENEW IT!" countdown on real time; the GameMode unpauses on "RENEW IT!". */
 	void StartCountdown();
 
+	/** Re-reads the fixed HUD labels after the language was changed on the pause menu. */
+	void RefreshLocalizedTexts();
+
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "FlightHUD")
 	TObjectPtr<UImage> CrosshairImage;
 
@@ -176,12 +179,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
 	float CountdownGoHoldSeconds = 1.0f;
 
-	/** The top-left controls panel stays this long after takeoff, then fades out. */
+	/** The top-left controls panel stays this long in total after takeoff (its ring drains, then a short fade). */
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
-	float ControlsPanelSeconds = 20.0f;
+	float ControlsPanelSeconds = 10.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
-	float ControlsPanelFadeSeconds = 1.5f;
+	float ControlsPanelFadeSeconds = 0.3f;
 
 private:
 	TWeakObjectPtr<AGliderPawn> CachedGlider;
@@ -207,6 +210,13 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> ControlsPanel;
+
+	/** Timer ring in the panel's bottom-right corner; empties as the panel's time runs out. */
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> ControlsRingFill;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> ControlsRingMID;
 
 	/** Real seconds since the countdown started; negative while no countdown runs. */
 	float CountdownElapsed = -1.0f;
@@ -393,8 +403,8 @@ private:
 };
 
 /**
- * Title screen over the paused level: logo, tagline and flat placeholder buttons for Play, Language and Quit.
- * Button art from Berf will replace the plain rectangles later.
+ * Title screen over the paused level: game icon, tagline and flat placeholder buttons for Play and Quit,
+ * plus a language square in the corner. Button art from Berf will replace the plain rectangles later.
  */
 UCLASS(Blueprintable)
 class DONOTSMOKE_API UDoNotSmokeMainMenuWidget : public UUserWidget
@@ -410,11 +420,11 @@ protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
-	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Assets")
-	TObjectPtr<UTexture2D> ProhibitionTexture;
+	/** The pause menu reuses this layout with Resume / Exit labels and a "PAUSED" line instead of the tagline. */
+	virtual bool IsPauseMenu() const { return false; }
 
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|Assets")
-	TObjectPtr<UTexture2D> StackPuffTexture;
+	TObjectPtr<UTexture2D> GameIconTexture;
 
 private:
 	bool bBuiltFallbackTree = false;
@@ -452,6 +462,16 @@ private:
 
 	UFUNCTION()
 	void HandleQuitClicked();
+};
+
+/** ESC menu during flight: same layout as the title screen with Resume, Exit and the language square. */
+UCLASS(Blueprintable)
+class DONOTSMOKE_API UDoNotSmokePauseMenuWidget : public UDoNotSmokeMainMenuWidget
+{
+	GENERATED_BODY()
+
+protected:
+	virtual bool IsPauseMenu() const override { return true; }
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
@@ -559,6 +579,12 @@ public:
 	/** Called by the HUD on "RENEW IT!": unpauses the level so the flight begins. */
 	void HandleCountdownFinished();
 
+	/** ESC during flight: freezes the level behind the pause menu. */
+	void OpenPauseMenu();
+
+	/** Pause menu Resume (or ESC again): closes the menu and unfreezes the level. */
+	void ResumeFromPause();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -589,6 +615,9 @@ protected:
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "DoNotSmoke|UI")
 	TObjectPtr<UDoNotSmokeMainMenuWidget> MainMenuWidget;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "DoNotSmoke|UI")
+	TObjectPtr<UDoNotSmokePauseMenuWidget> PauseMenuWidget;
 
 	/** Level music, played as a UI sound so it keeps going over the paused title screen and newspaper. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Audio")
