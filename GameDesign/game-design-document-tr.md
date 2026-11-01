@@ -47,7 +47,7 @@ Geleneksel iklim oyunları oyuncuyu çaresizce çöp toplayan pasif bir temizlik
 Planör geleneksel motorlu bir uçak veya ağır Chaos fizik simülasyonu değildir; `Tick` bazlı kinematik aerodinamik süzülüş, momentum, hız sönümleme ve yerçekimi dengesiyle hareket eder.
 
 * **Süzülüş Fiziği (Kinematik Model & Saf Enerji Kaybı):** 
-  * **Net İrtifa Kaybı Kuralı:** Planör düz uçuşta veya dalış-tırmanış manevralarında her zaman net bir irtifa kaybı yaşar (Glide Ratio: 20:1). Boost yokken planör her açıda sürekli batar (hız / 20; temel hız 2400 u/s'de ~120 u/s): düz uçuşta irtifa korunamaz, girdisiz bir planör spawn irtifasından (1800u) yaklaşık 13 saniyede yere iner. İrtifa kazanmanın tek yolu güneşle şarj olup Solar Boost kullanmaktır. Dalıştan kazanılan hızla burnu yukarı çekmek kinetik enerjiyi irtifaya dönüştürür ancak asla dalış öncesi irtifanın üstüne çıkaramaz (sonsuz süzülüş veya kinetik perpetual-motion engellenmiştir).
+  * **Net İrtifa Kaybı Kuralı:** Planör düz uçuşta veya dalış-tırmanış manevralarında her zaman net bir irtifa kaybı yaşar (Glide Ratio: 20:1). Boost yokken planör her açıda sürekli batar (hız / 20; temel hız 2400 u/s'de ~120 u/s): düz uçuşta irtifa korunamaz, girdisiz bir planör spawn irtifasından (2200u) kısa sürede yere iner. İrtifa kazanmanın tek yolu güneşle şarj olup Solar Boost kullanmaktır. Dalıştan kazanılan hızla burnu yukarı çekmek kinetik enerjiyi irtifaya dönüştürür ancak asla dalış öncesi irtifanın üstüne çıkaramaz (sonsuz süzülüş veya kinetik perpetual-motion engellenmiştir).
   * **İrtifa Kazanımının Tek Yolu:** Planörün net irtifa kazanabilmesinin tek ve mutlak yolu **Solar Boost** harcamaktır.
   * **Dalış ve Tutunma:** Burnunu aşağı eğdikçe (Pitch Down) yerçekimi kinetik hıza dönüşür; hızlandıkça kontrol hassasiyeti artar. Burnunu yukarı çektikçe kinetik enerji irtifaya dönüşür; hız `900 units/sec` altına düşerse stall (tutunma kaybı) tetiklenir ve burun otomatik aşağı düşer.
   * Dönüşlerde Roll ve Yaw açıları `RInterpTo` ile yumuşatılarak bank dönüşü hissi verilir.
@@ -149,7 +149,7 @@ Uçuş yönü ile bakış/nişan yönünü birbirinden tamamen ayıran kamera ya
   $$\text{Anlık Karbon Üretimi} = \text{Açık Baca Sayısı} \times C_{\text{oran}} \quad (\text{Baz Değer: } C_{\text{oran}} = 10\text{ kg CO}_2/\text{sn})$$
   Oyuncu bacaları ne kadar hızlı mühürlerse, toplam salınan karbon miktarı o kadar düşük kalır.
 * **Teorik Minimum Baz Salınım ($C_{\min}$):**
-  Bir oyuncunun haritadaki tüm bacaları en optimize uçuş rotasında, sıfır ıskayla ve sürekli boost kullanarak kapatabileceği teorik minimum karbon salınımı ($C_{\min}$) harita bazında sabittir (Örnek başlangıç referansı: Seviye 1 için $C_{\min} = 4000\text{ kg}$ (13 ağızlı geniş yerleşim için tahmin, oyunla doğrulanacak); Seviye 2 ve 3 değerleri haritalar kurulunca aynı yöntemle hesaplanacak).
+  Bir oyuncunun haritadaki tüm bacaları en optimize uçuş rotasında, sıfır ıskayla ve sürekli boost kullanarak kapatabileceği teorik minimum karbon salınımı ($C_{\min}$) harita bazında sabittir (Örnek başlangıç referansı: Seviye 1 için $C_{\min} = 4000\text{ kg}$ (geçici; 23 ağızlı yerleşimde optimal tur ~5500 kg, önerilen bantlar 5000–6000 / 6000–7000 / 7000+ kg); Seviye 2 ve 3 değerleri haritalar kurulunca aynı yöntemle hesaplanacak).
 * **Yıldız Derecelendirmesi (COP31 Karbon Karnesi):**
   * ⭐⭐⭐ **3 Yıldız (Net-Zero Hero):** $\text{Toplam Karbon} \le C_{\min} \times 1.25$ (Kusursuz rota, sıfır ıskalama).
   * ⭐⭐ **2 Yıldız (Karbon Nötr Geçiş):** $C_{\min} \times 1.25 < \text{Toplam Karbon} \le C_{\min} \times 1.75$ (Kabul edilebilir uçuş, 1-2 ıskalama).
@@ -200,7 +200,7 @@ Fabrika türleri tek bir seviyeye hapsolmaz; her seviyede bir önceki seviyenin 
 ### Seviye 1: Vadi Atölyeleri (`L_Level01_Valley` — Onboarding & Temel Uçuş)
 * **Atmosfer & Güneş:** Geniş güneş boşlukları (Sun Pockets), ferah vadi, sakin rüzgar. Açık bacalar kapatılmadıkça duman tavanı güneş boşluklarını yavaşça daraltır.
 * **Baca Dağılımı (%80 Normal / %20 Çoklu / %0 Yoğun):** Çoğunluğu tekli standart fabrika bacalarından oluşur; seviyenin sonuna doğru oyuncu ilk kez **1 adet İkiz (Çoklu) Baca** ile karşılaşarak 5.0 saniyelik cooldown dönüş manevrasını öğrenir.
-* **Mekanik Amaç:** Uçuş kontrollerine, güneş boşluklarına girerek şarj olmaya, Solar Boost ile irtifa kazanmaya ve teğet atış disiplinine alışma ($C_{\min} \approx 4000\text{ kg}$; 11 baca / 13 ağız: önde S kıvrımlı 4'lü vadi hattı, ortası ikizli 5 km'lik sanayi halkası, güneydoğuda ikiz + tekli, uzak köşede tek yoğun baca; alan spawn'dan ~65 km'ye uzanır).
+* **Mekanik Amaç:** Uçuş kontrollerine, güneş boşluklarına girerek şarj olmaya, Solar Boost ile irtifa kazanmaya ve teğet atış disiplinine alışma (18 baca / 23 ağız: 13 Normal, 4 Çoklu, 1 Yoğun test bacası; hepsi ±25000u'luk sınır küplerinin içinde, sınırın 2500u dışında görünmez yumuşak duvar).
 
 ### Seviye 2: Lojistik ve Sanayi Koridoru (`L_Level02_Corridor` — Çoklu Kümeler, Alçak İrtifa & Pankartlı Jet)
 * **Atmosfer & Güneş:** Parçalı gri duman tavanı, orta ölçekli güneş koridorları. Oyuncu şarj olmak için rotasını güneş pencerelerinden geçecek şekilde planlamalıdır.
@@ -263,7 +263,7 @@ Fabrika türleri tek bir seviyeye hapsolmaz; her seviyede bir önceki seviyenin 
 ### 6.2 Berf — UI/UX Designer & Sound Designer
 * **Rol & Sorumluluk:** Arayüz tasarımı, oyuncu geri bildirim göstergeleri (HUD), seviye sonu COP31 karbon karnesi, dinamik ses tasarımı ve atmosferik miksaj.
 * **Teslim Edilecek UI/UX Widgetları:**
-  * **Ana Menü (`UDoNotSmokeMainMenuWidget`):** L1 donuk haldeyken üstünde açılır: logo, "DO NOT SMOKE" başlığı, slogan ve PLAY / LANGUAGE / QUIT butonları. Butonlar şimdilik düz renkli yuvarlak dikdörtgen; Berf'in buton görselleri gelince değişecek.
+  * **Ana Menü (`UDoNotSmokeMainMenuWidget`):** Berf'in başlangıç görseli (`T_UI_StartValley`) önünde, solda oyun ikonu, "DO NOT SMOKE" başlığı, slogan ve Berf'in panel görselli PLAY / QUIT butonları; sağ altta EN/TR/NL karesi. QUIT onay sorar. Play sonrası kararıp level'e açılır. ESC ile aynı düzende pause menüsü (RESUME / EXIT / dil) açılır.
   * **Dil:** Oyunun varsayılan dili İngilizce; LANGUAGE butonu İngilizce → Türkçe → Hollandaca arasında döner ve seçim kalıcıdır. Tüm ekran metinleri tek bir kod içi tablodan gelir (`DoNotSmokeLocale`).
   * **`WBP_FlightHUD`:**
     * **Merkez:** Dinamik nişangah (`T_UI_Crosshair`) ve etrafında 5.0 saniyelik radyal dolum halkası: koyu zemin (`T_UI_RingDark`), cooldown sırasında dolan beyaz halka (`T_UI_Ring`), atışa hazır olunca yeşil halka (`T_UI_RingGreen`). Nişangah rengi: cooldown'da kırmızı, manyetik kilitte yeşil, koni sınırında sarı.
@@ -282,7 +282,6 @@ Fabrika türleri tek bir seviyeye hapsolmaz; her seviyede bir önceki seviyenin 
     * **Manşet Fotoğrafı:** Yıldıza göre vadi görseli: 1 yıldız kasvetli (`T_UI_Valley1Star`), 2 yıldız kısmen açılmış (`T_UI_Valley2Star`), 3 yıldız güneşli (`T_UI_ValleyScene`).
     * **AUDIT Kutusu:** Yıldızlar (dolu/boş), duman ikonu ile Toplam Karbon vs. Minimum Hedef ($C_{\min}$), Seviye Süresi (sn) ve Mühür İsabet Oranı (% Accuracy).
     * **Alt Şerit:** `[R] RESTART SECTOR`; `R` / `Enter` / `Space` seviyeyi yeniden başlatır. Bir sonraki seviyeye geçiş, diğer haritalar hazır olunca eklenecek.
-  * **`WBP_MainMenu`:** "Do Not Smoke" logolu açılış menüsü.
   * **Crash Ekranı (`UDoNotSmokeCrashWidget`):**
     * Kaza anında ekranı saran çatlak cam vinyeti (`T_UI_CrackOverlay`).
     * Ölüm sebebine göre ikon: yere çakılma `T_UI_GliderDive`, baca gövdesine çarpma `T_UI_SmokestackBurst`, Tip C yoğun duman sütununda boğulma `T_UI_SmokeWarning`.
@@ -311,7 +310,7 @@ Fabrika türleri tek bir seviyeye hapsolmaz; her seviyede bir önceki seviyenin 
   * **"Do Not Smoke" Logosu:** Kırmızı çember içinde sigara yerine tütmekte olan endüstriyel fabrika bacası ikonu.
   * **Tanıtım Görselleri:** Itch.io kapak afişi (Banner), oyun ikonu ve vitrin görselleri.
 * **Niagara VFX Görsel Desteği (Quark ile Ortak):**
-  * `NS_ToxicSmog` (standart gri/siyah duman sütunu), `NS_HeavyToxicSmog` (Tip C içine girilmez katran siyahı yoğun basınçlı duman sütunu), `NS_SealSparkle` (kapanan ağızda sıcak sarı ışıltı; eski `NS_CleanSteam` beyaz buharın yerine), `NS_JetWake` (jet hava distorsiyonu), `NS_Sunbeam` (güneş boşluğu huzmeleri), `NS_SolarBoost` (itme alevi), `NS_Speedlines` (hız çizgileri).
+  * `NS_ToxicSmog` (standart gri/siyah duman sütunu), `NS_HeavyToxicSmog` (Tip C içine girilmez katran siyahı yoğun basınçlı duman sütunu), `NS_SealSparkle` (kapanan ağızda sıcak sarı ışıltı; eski `NS_CleanSteam` beyaz buharın yerine), `NS_JetWake` (jet hava distorsiyonu), `NS_SunMotes` (açık gökyüzünden yağan ışık çizgileri), `NS_SolarBoost` (itme alevi), `NS_Speedlines` (hız çizgileri).
 * **Girdi Bağımlılıkları:** Quark'tan model ölçek ve hedef açıklığı ölçülerini alır; modelleri Quark'a blueprint aktörlerine bağlanması için teslim eder; logoyu Berf'e arayüzde kullanması için verir.
 
 ---
