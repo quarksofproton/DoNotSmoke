@@ -220,9 +220,11 @@ void UDoNotSmokeFlightHUDWidget::BuildFallbackWidgetTree()
 	AddText(RootCanvas, CarbonStatusText, TopCenter, FVector2D(205.0f, 72.0f));
 
 	// 6. Top: VIP jet warning panel
-	JetWarningPanel = AddImage(WidgetTree, RootCanvas, TEXT("JetWarningPanel"), WarningPanelTexture, TopCenter, FVector2D(0.5f, 0.0f), FVector2D(0.0f, 200.0f), FVector2D(600.0f, 150.0f));
-	JetWarningText = MakeText(WidgetTree, TEXT("JetWarningText"), 20, FLinearColor(1.0f, 0.25f, 0.2f, 1.0f));
-	AddText(RootCanvas, JetWarningText, TopCenter, FVector2D(0.0f, 275.0f));
+	// Sits right of the top bar at the same height (bar spans x -420..420, y 16..128)
+	JetWarningPanel = AddImage(WidgetTree, RootCanvas, TEXT("JetWarningPanel"), WarningPanelTexture, TopCenter, FVector2D(0.0f, 0.0f), FVector2D(430.0f, 16.0f), FVector2D(448.0f, 112.0f));
+	JetWarningText = MakeText(WidgetTree, TEXT("JetWarningText"), 18, FLinearColor(1.0f, 0.25f, 0.2f, 1.0f));
+	JetWarningText->SetText(FText::FromString(TEXT("!  VIP JET INCOMING  !")));
+	AddText(RootCanvas, JetWarningText, TopCenter, FVector2D(654.0f, 72.0f));
 	JetWarningPanel->SetVisibility(ESlateVisibility::Collapsed);
 	JetWarningText->SetVisibility(ESlateVisibility::Collapsed);
 
@@ -360,17 +362,18 @@ void UDoNotSmokeFlightHUDWidget::NativeTick(const FGeometry& MyGeometry, float I
 			}
 		}
 
-		const bool bJet = GM->IsPrivateJetAlertActive();
-		const ESlateVisibility JetVis = (bJet && bBlinkOn) ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
-		if (JetWarningPanel) { JetWarningPanel->SetVisibility(JetVis); }
-		if (JetWarningText)
+		// Show the warning once, steadily, for a few seconds when a jet is dispatched (slogan stays on the jet's banner)
+		const bool bJetAlert = GM->IsPrivateJetAlertActive();
+		if (bJetAlert && !bWasJetAlertActive)
 		{
-			if (bJet)
-			{
-				JetWarningText->SetText(FText::FromString(FString::Printf(TEXT("!  VIP JET INCOMING  !\n\"%s\""), *GM->GetActiveJetBannerSlogan().ToString())));
-			}
-			JetWarningText->SetVisibility(JetVis);
+			JetWarningRemaining = JetWarningDisplaySeconds;
 		}
+		bWasJetAlertActive = bJetAlert;
+		JetWarningRemaining = FMath::Max(0.0f, JetWarningRemaining - InDeltaTime);
+
+		const ESlateVisibility JetVis = JetWarningRemaining > 0.0f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		if (JetWarningPanel) { JetWarningPanel->SetVisibility(JetVis); }
+		if (JetWarningText) { JetWarningText->SetVisibility(JetVis); }
 	}
 }
 
@@ -818,12 +821,25 @@ void UDoNotSmokeSummaryWidget::BuildFallbackWidgetTree()
 	Footer->SetText(FText::FromString(TEXT("[R]  RESTART SECTOR")));
 	Place(PagePanel, MakeCentredBox(WidgetTree, TEXT("FooterBox"), Footer), 95.0f, 885.0f, 657.0f, 930.0f);
 
+	// 8. Confetti layer above the page, centred so piece positions are offsets from screen centre
+	ConfettiLayer = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("ConfettiLayer"));
+	ConfettiLayer->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UCanvasPanelSlot* Slot = RootCanvas->AddChildToCanvas(ConfettiLayer))
+	{
+		Slot->SetAnchors(FAnchors(0.5f, 0.5f));
+		Slot->SetAlignment(FVector2D(0.5f, 0.5f));
+		Slot->SetSize(FVector2D::ZeroVector);
+	}
+
 	bBuiltFallbackTree = true;
 }
 
 void UDoNotSmokeSummaryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// Widgets tick on real time, so the reveal and confetti keep animating while the game is paused
+	TickConfetti(InDeltaTime);
 
 	if (!PagePanel || RevealElapsed >= RevealDuration)
 	{
@@ -887,6 +903,90 @@ void UDoNotSmokeSummaryWidget::SetupSummaryData(int32 InStars, float InCarbonKg,
 	}
 
 	RevealElapsed = 0.0f;
+	BurstConfetti();
+}
+
+void UDoNotSmokeSummaryWidget::BurstConfetti()
+{
+	if (!ConfettiLayer || !WidgetTree)
+	{
+		return;
+	}
+
+	ConfettiLayer->ClearChildren();
+	ConfettiPieces.Reset();
+	ConfettiAge = 0.0f;
+
+	// Palette taken from the HUD art: alarm red, solar green, solar blue, sun yellow, paper white
+	static const FLinearColor Palette[] = {
+		FLinearColor(0.90f, 0.19f, 0.15f), FLinearColor(0.30f, 0.80f, 0.45f), FLinearColor(0.20f, 0.55f, 0.95f),
+		FLinearColor(1.00f, 0.80f, 0.20f), FLinearColor(0.95f, 0.93f, 0.88f) };
+
+	for (int32 i = 0; i < ConfettiCount; ++i)
+	{
+		UImage* Piece = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		Piece->SetColorAndOpacity(Palette[FMath::RandRange(0, UE_ARRAY_COUNT(Palette) - 1)]);
+		if (UCanvasPanelSlot* Slot = ConfettiLayer->AddChildToCanvas(Piece))
+		{
+			Slot->SetAlignment(FVector2D(0.5f, 0.5f));
+			Slot->SetSize(FVector2D(FMath::FRandRange(8.0f, 14.0f), FMath::FRandRange(14.0f, 24.0f)));
+		}
+
+		// Fountain burst from just below the page centre, biased upward
+		const float LaunchAngle = FMath::DegreesToRadians(FMath::FRandRange(-160.0f, -20.0f));
+		const float Speed = FMath::FRandRange(700.0f, 1500.0f);
+
+		FConfettiPiece& State = ConfettiPieces.AddDefaulted_GetRef();
+		State.Image = Piece;
+		State.Position = FVector2D(FMath::FRandRange(-60.0f, 60.0f), 120.0f);
+		State.Velocity = FVector2D(FMath::Cos(LaunchAngle), FMath::Sin(LaunchAngle)) * Speed;
+		State.Angle = FMath::FRandRange(0.0f, 360.0f);
+		State.AngularSpeed = FMath::FRandRange(-540.0f, 540.0f);
+		State.Flutter = FMath::FRandRange(0.0f, 2.0f * PI);
+	}
+}
+
+void UDoNotSmokeSummaryWidget::TickConfetti(float DeltaTime)
+{
+	if (ConfettiPieces.Num() == 0)
+	{
+		return;
+	}
+
+	ConfettiAge += DeltaTime;
+	if (ConfettiAge >= ConfettiLifetime)
+	{
+		if (ConfettiLayer)
+		{
+			ConfettiLayer->ClearChildren();
+		}
+		ConfettiPieces.Reset();
+		return;
+	}
+
+	// Paper-like fall: gravity, strong air drag and a sideways flutter; fade out over the last second
+	const float Opacity = FMath::Clamp(ConfettiLifetime - ConfettiAge, 0.0f, 1.0f);
+	const float Drag = FMath::Exp(-1.6f * DeltaTime);
+	for (FConfettiPiece& State : ConfettiPieces)
+	{
+		UImage* Piece = State.Image.Get();
+		if (!Piece)
+		{
+			continue;
+		}
+
+		State.Velocity = State.Velocity * Drag + FVector2D(0.0f, 900.0f * DeltaTime);
+		State.Flutter += DeltaTime * 6.0f;
+		State.Position += (State.Velocity + FVector2D(FMath::Sin(State.Flutter) * 60.0f, 0.0f)) * DeltaTime;
+		State.Angle += State.AngularSpeed * DeltaTime;
+
+		if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(Piece->Slot))
+		{
+			Slot->SetPosition(State.Position);
+		}
+		Piece->SetRenderTransformAngle(State.Angle);
+		Piece->SetRenderOpacity(Opacity);
+	}
 }
 
 // ==========================================
@@ -954,10 +1054,15 @@ void ADoNotSmokeGameMode::BeginPlay()
 	}
 	ApplySkyChoke(0.0f);
 
+	// Jets no longer self-schedule: the dispatcher sends one random route at a time
+	TrackedJets.Empty();
 	for (TActorIterator<APrivateJet> It(World); It; ++It)
 	{
 		It->OnJetApproachStateChanged.AddDynamic(this, &ADoNotSmokeGameMode::HandlePrivateJetApproachChanged);
+		It->SetAutoSchedulePasses(false);
+		TrackedJets.Add(*It);
 	}
+	JetDispatchTimer = FirstJetDelaySeconds;
 
 	// Bind to player GliderPawn events for shot accounting and Crash restart
 	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(World, 0))
@@ -995,6 +1100,7 @@ void ADoNotSmokeGameMode::Tick(float DeltaTime)
 	}
 
 	ElapsedLevelSeconds += DeltaTime;
+	TickJetDispatcher(DeltaTime);
 
 	if (OpenSmokestackCount > 0)
 	{
@@ -1056,6 +1162,43 @@ void ADoNotSmokeGameMode::NotifyCarbonSealFired()
 	++TotalShotsFired;
 }
 
+void ADoNotSmokeGameMode::TickJetDispatcher(float DeltaTime)
+{
+	if (TrackedJets.Num() == 0)
+	{
+		return;
+	}
+
+	JetDispatchTimer -= DeltaTime;
+	if (JetDispatchTimer > 0.0f)
+	{
+		return;
+	}
+
+	TArray<APrivateJet*> IdleJets;
+	for (const TWeakObjectPtr<APrivateJet>& WeakJet : TrackedJets)
+	{
+		APrivateJet* Jet = WeakJet.Get();
+		if (!Jet)
+		{
+			continue;
+		}
+		if (Jet->IsJetActiveOrApproaching())
+		{
+			// A pass is still in the air: check again shortly instead of stacking a second jet
+			JetDispatchTimer = 1.0f;
+			return;
+		}
+		IdleJets.Add(Jet);
+	}
+
+	if (IdleJets.Num() > 0)
+	{
+		IdleJets[FMath::RandRange(0, IdleJets.Num() - 1)]->RequestFlybyPass();
+	}
+	JetDispatchTimer = JetDispatchIntervalSeconds;
+}
+
 void ADoNotSmokeGameMode::ApplySkyChoke(float ChokeAlpha)
 {
 	const float Alpha = FMath::Clamp(ChokeAlpha, 0.0f, 1.0f);
@@ -1108,6 +1251,7 @@ void ADoNotSmokeGameMode::TriggerInstantRestart()
 			PC->SetShowMouseCursor(false);
 		}
 
+		UGameplayStatics::SetGamePaused(World, false);
 		const FString CurrentMapName = UGameplayStatics::GetCurrentLevelName(World, true);
 		UGameplayStatics::OpenLevel(World, FName(*CurrentMapName));
 	}
@@ -1158,6 +1302,9 @@ void ADoNotSmokeGameMode::HandleSmokestackSealed(ASmokestack* SealedStack)
 				PC->SetShowMouseCursor(true);
 			}
 		}
+
+		// Freeze the world behind the newspaper (glider, jets, timers); UI keeps ticking on real time
+		UGameplayStatics::SetGamePaused(GetWorld(), true);
 
 		OnLevelCompleted.Broadcast(FinalStars, CumulativeCarbonKg, ElapsedLevelSeconds, FinalAccuracy);
 		BP_OnLevelCompleted(FinalStars, CumulativeCarbonKg, ElapsedLevelSeconds, FinalAccuracy);

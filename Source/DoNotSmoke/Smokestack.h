@@ -177,8 +177,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
 	float ClusteredHeightScale = 1.0f;
 
+	/** 1400u art x 1.714 = ~2400u, the same mouth height as Type A. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
-	float HeavyHeightScale = 1.0f;
+	float HeavyHeightScale = 1.714f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "100.0", ClampMax = "500.0"))
 	float RimSphereRadius = 240.0f;

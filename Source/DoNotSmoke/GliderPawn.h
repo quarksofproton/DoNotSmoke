@@ -21,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCarbonSealFiredSignature);
 
 /**
  * Kinematic Solar Glider Pawn featuring:
- * - Strict net-loss gliding (15:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
+ * - Strict net-loss gliding (20:1 glide ratio, MaxAllowedGlideZ ceiling cap unless Solar Boosting)
  * - Decoupled SpringArm camera look & 135-degree cone clamped projectile aiming with ~10-degree magnetic assist
  * - Periodic 0.2s vertical sunlight LineTrace (binary 12.5%/s charge vs 0%/s under smog)
  * - Altitude thresholds: 200u Kill Floor, 400u Smog Bed, 600u "PULL UP!" warning, 7800u Max Ceiling
@@ -164,10 +164,10 @@ private:
 	// ATOMIC FLIGHT & ENERGY PARAMETERS (GDD Sec 3)
 	// ==========================================
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Flight", meta = (AllowPrivateAccess = "true"))
-	float BaseVelocity = 1800.0f;
+	float BaseVelocity = 2400.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Flight", meta = (AllowPrivateAccess = "true"))
-	float MaxDiveVelocity = 3800.0f;
+	float MaxDiveVelocity = 4600.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Flight", meta = (AllowPrivateAccess = "true"))
 	float StallVelocity = 900.0f;
@@ -179,7 +179,7 @@ private:
 	float RollYawRateDegPerSec = 125.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Flight", meta = (AllowPrivateAccess = "true"))
-	float GlideRatio = 15.0f;
+	float GlideRatio = 20.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Energy", meta = (AllowPrivateAccess = "true"))
 	float SolarChargeRatePerSec = 12.5f;
@@ -255,7 +255,7 @@ private:
 	// ==========================================
 	// INTERNAL RUNTIME STATE
 	// ==========================================
-	float CurrentSpeed = 1800.0f;
+	float CurrentSpeed = 2400.0f;
 	float SolarCharge = 100.0f;
 	float MaxAllowedGlideZ = 1800.0f;
 	float SealCooldownRemaining = 0.0f;

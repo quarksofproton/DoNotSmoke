@@ -147,10 +147,11 @@ void AGliderPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 	}
 
 	// Zero-setup direct key & mouse bindings so any test map works immediately out of the box
-	PlayerInputComponent->BindKey(EKeys::W, IE_Pressed, this, &AGliderPawn::InputPitchUpPressed);
-	PlayerInputComponent->BindKey(EKeys::W, IE_Released, this, &AGliderPawn::InputPitchUpReleased);
-	PlayerInputComponent->BindKey(EKeys::S, IE_Pressed, this, &AGliderPawn::InputPitchDownPressed);
-	PlayerInputComponent->BindKey(EKeys::S, IE_Released, this, &AGliderPawn::InputPitchDownReleased);
+	// Flight-stick convention (Quark): S pulls the nose up, W pushes it down
+	PlayerInputComponent->BindKey(EKeys::S, IE_Pressed, this, &AGliderPawn::InputPitchUpPressed);
+	PlayerInputComponent->BindKey(EKeys::S, IE_Released, this, &AGliderPawn::InputPitchUpReleased);
+	PlayerInputComponent->BindKey(EKeys::W, IE_Pressed, this, &AGliderPawn::InputPitchDownPressed);
+	PlayerInputComponent->BindKey(EKeys::W, IE_Released, this, &AGliderPawn::InputPitchDownReleased);
 
 	PlayerInputComponent->BindKey(EKeys::A, IE_Pressed, this, &AGliderPawn::InputRollLeftPressed);
 	PlayerInputComponent->BindKey(EKeys::A, IE_Released, this, &AGliderPawn::InputRollLeftReleased);
@@ -333,7 +334,7 @@ void AGliderPawn::UpdateFlightKinematics(float DeltaTime)
 	FVector VelocityVector = GetActorForwardVector() * CurrentSpeed;
 
 	// Constant glide sink at every attitude unless boosting: the glider can never hold altitude on its own,
-	// so sunlight and Solar Boost are the only way to stay up (speed / GlideRatio, ~120 u/s at base speed)
+	// so sunlight and Solar Boost are the only way to stay up (speed / GlideRatio, ~120 u/s at base speed 2400 / 20)
 	if (!bIsSolarBoosting)
 	{
 		VelocityVector.Z -= CurrentSpeed / FMath::Max(1.0f, GlideRatio);

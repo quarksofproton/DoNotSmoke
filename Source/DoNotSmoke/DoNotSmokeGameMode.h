@@ -142,6 +142,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Assets")
 	TObjectPtr<UTexture2D> HazardFrameTexture;
 
+	/** How long the VIP jet warning stays on screen after a jet is dispatched. */
+	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
+	float JetWarningDisplaySeconds = 3.0f;
+
 	/** Battery percentage below which the arc turns red. */
 	UPROPERTY(EditDefaultsOnly, Category = "FlightHUD|Tuning")
 	float LowBatteryPercent = 25.0f;
@@ -155,6 +159,8 @@ private:
 	/** Last text pushed to StacksAndCO2Text, so SetText only runs when the string changes. */
 	FString LastStatusText;
 	FString LastCarbonText;
+	bool bWasJetAlertActive = false;
+	float JetWarningRemaining = 0.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> CooldownRingMID;
@@ -294,11 +300,36 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Summary|Tuning")
 	float RevealDuration = 0.9f;
 
+	/** Number of confetti pieces burst out with the newspaper. */
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Tuning")
+	int32 ConfettiCount = 140;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Summary|Tuning")
+	float ConfettiLifetime = 3.5f;
+
 private:
+	struct FConfettiPiece
+	{
+		TWeakObjectPtr<UImage> Image;
+		FVector2D Position = FVector2D::ZeroVector;
+		FVector2D Velocity = FVector2D::ZeroVector;
+		float Angle = 0.0f;
+		float AngularSpeed = 0.0f;
+		float Flutter = 0.0f;
+	};
+
 	bool bBuiltFallbackTree = false;
 	float RevealElapsed = 0.0f;
+	float ConfettiAge = 0.0f;
+	TArray<FConfettiPiece> ConfettiPieces;
+
+	/** Full-screen layer above the page that holds the confetti rectangles. */
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> ConfettiLayer;
 
 	void BuildFallbackWidgetTree();
+	void BurstConfetti();
+	void TickConfetti(float DeltaTime);
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
@@ -471,6 +502,19 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TWeakObjectPtr<ASmokestack>> TrackedSmokestacks;
+
+	/** Seconds between VIP jet passes; each pass picks one jet route at random (only one jet in the air at a time). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Jets", meta = (AllowPrivateAccess = "true"))
+	float JetDispatchIntervalSeconds = 10.0f;
+
+	/** Delay before the first jet so the player meets it early. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Jets", meta = (AllowPrivateAccess = "true"))
+	float FirstJetDelaySeconds = 6.0f;
+
+	TArray<TWeakObjectPtr<APrivateJet>> TrackedJets;
+	float JetDispatchTimer = 0.0f;
+
+	void TickJetDispatcher(float DeltaTime);
 
 	TWeakObjectPtr<class ADirectionalLight> SunLight;
 	TWeakObjectPtr<class AExponentialHeightFog> SkyFog;

@@ -105,16 +105,30 @@ void APrivateJet::BeginPlay()
 	WaitTimer = FMath::Min(6.0f, PassIntervalSeconds);
 }
 
+bool APrivateJet::RequestFlybyPass()
+{
+	if (IsJetActiveOrApproaching())
+	{
+		return false;
+	}
+
+	BeginApproachWarning();
+	return true;
+}
+
 void APrivateJet::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
 	if (!bIsApproaching && !bIsFlyingPass)
 	{
-		WaitTimer -= DeltaTime;
-		if (WaitTimer <= 0.0f)
+		if (bAutoSchedulePasses)
 		{
-			BeginApproachWarning();
+			WaitTimer -= DeltaTime;
+			if (WaitTimer <= 0.0f)
+			{
+				BeginApproachWarning();
+			}
 		}
 		return;
 	}

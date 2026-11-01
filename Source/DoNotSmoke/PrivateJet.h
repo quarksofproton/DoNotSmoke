@@ -45,6 +45,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "PrivateJet|State")
 	FText GetCurrentBannerSlogan() const;
 
+	/** Starts the approach warning and pass now if the jet is idle; returns false if a pass is already running. */
+	UFUNCTION(BlueprintCallable, Category = "PrivateJet|State")
+	bool RequestFlybyPass();
+
+	/** When false the jet never starts passes on its own and waits for RequestFlybyPass (GameMode dispatcher). */
+	UFUNCTION(BlueprintCallable, Category = "PrivateJet|State")
+	void SetAutoSchedulePasses(bool bEnabled) { bAutoSchedulePasses = bEnabled; }
+
 	// ==========================================
 	// INTERFACE IMPLEMENTATIONS (ISP)
 	// ==========================================
@@ -119,6 +127,10 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
 	TArray<FText> BannerSlogans;
+
+	/** Self-timed passes every PassIntervalSeconds; disabled by the GameMode when it dispatches jets itself. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PrivateJet|Config", meta = (AllowPrivateAccess = "true"))
+	bool bAutoSchedulePasses = true;
 
 	// ==========================================
 	// INTERNAL STATE
