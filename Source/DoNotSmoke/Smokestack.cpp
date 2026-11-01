@@ -462,6 +462,7 @@ void ASmokestack::RefreshArchetypeCollisionState()
 	// Assembly_Cluster_2: 2 mouths at (-340, 0, 600) and (340, 0, 600)
 	// Assembly_Cluster_3: 3 mouths in equilateral triangle at (-340, 196.3, 600), (340, 196.3, 600), and (0, -392.6, 600)
 	// Assembly_Heavy: 1 mouth at (0, 0, 1400)
+	// Mouth heights below are the art's; they are then multiplied by the type height scale and HeightVariation
 	float MouthHeightZ = 1200.0f;
 	float ShaftRadius = 275.0f;
 	int32 ActiveMouths = 1;
@@ -510,9 +511,20 @@ void ASmokestack::RefreshArchetypeCollisionState()
 		break;
 	}
 
+	// Stretch the assembly vertically; mouths, rims, collision and VFX all follow the scaled mouth height
+	const float TypeHeightScale = SmokestackType == ESmokestackType::Normal ? NormalHeightScale
+		: (SmokestackType == ESmokestackType::Clustered ? ClusteredHeightScale : HeavyHeightScale);
+	const float HeightScale = FMath::Max(0.1f, TypeHeightScale * HeightVariation);
+	MouthHeightZ *= HeightScale;
+	for (FVector& Offset : MouthOffsets)
+	{
+		Offset.Z *= HeightScale;
+	}
+
 	if (ChimneyBodyMesh && DesiredBodyMesh)
 	{
 		ChimneyBodyMesh->SetStaticMesh(DesiredBodyMesh);
+		ChimneyBodyMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, HeightScale));
 	}
 
 	UCapsuleComponent* BodyCapsules[3] = { ChimneyBodyCollision, ChimneyBodyCollision_2, ChimneyBodyCollision_3 };

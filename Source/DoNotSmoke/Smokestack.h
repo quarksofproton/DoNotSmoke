@@ -166,6 +166,20 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "2", ClampMax = "3"))
 	int32 ClusterStackCount = 2;
 
+	/** Per-placement height variation (multiplies the type's height scale), for less uniform skylines. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "0.5", ClampMax = "2.0"))
+	float HeightVariation = 1.0f;
+
+	/** Vertical stretch per archetype: Normal (Type A) is drawn taller than its 1200u art so it clearly towers over Clustered (600u). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float NormalHeightScale = 2.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float ClusteredHeightScale = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float HeavyHeightScale = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "100.0", ClampMax = "500.0"))
 	float RimSphereRadius = 240.0f;
 

@@ -427,7 +427,7 @@ private:
 
 	/** Theoretical minimum carbon baseline (C_min) for 3-star evaluation (e.g., 500 / 1200 / 2200 kg). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
-	float TargetMinCarbonKg = 500.0f;
+	float TargetMinCarbonKg = 4000.0f;
 
 	/** Carbon ceiling at which unsealed smokestacks completely choke out Sun Pockets (Default: 2.5x C_min). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
