@@ -212,9 +212,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
 	float SunlightTraceInterval = 0.2f;
 
-	/** Upward sunlight trace length; must reach the smoke canopy (8500u) from the kill floor. */
+	/** World Z where the upward sunlight trace ends: exactly the smoke ceiling, where each canopy blocker's cross-section equals its cloud radius. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Glider|Config|Altitude", meta = (AllowPrivateAccess = "true"))
-	float SunlightTraceLength = 10000.0f;
+	float SunlightTraceTopZ = 8500.0f;
 
 	// ==========================================
 	// CAMERA & TARGETING PARAMETERS (GDD Sec 2.2 & 3.2)

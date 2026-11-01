@@ -494,7 +494,7 @@ void AGliderPawn::PerformSunlightTrace()
 	}
 
 	// Vertical upward LineTrace checking against overhead SmogCanopy blockers
-	const FVector EndLoc = StartLoc + FVector(0.0f, 0.0f, SunlightTraceLength);
+	const FVector EndLoc(StartLoc.X, StartLoc.Y, SunlightTraceTopZ);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SunlightTrace), false, this);
 
 	FHitResult Hit;

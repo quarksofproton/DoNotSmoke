@@ -419,6 +419,10 @@ public:
 	UFUNCTION(Exec, Category = "DoNotSmoke|Debug")
 	void DebugForceLevelComplete(int32 Stars = 3);
 
+	/** Console: fully seals the smokestack nearest to the glider (tests sun pockets and beams). */
+	UFUNCTION(Exec, Category = "DoNotSmoke|Debug")
+	void DebugSealNearestStack();
+
 	/** Reloads the active level (called from the crash screen restart button). */
 	UFUNCTION(BlueprintCallable, Category = "DoNotSmoke|Flow")
 	void TriggerInstantRestart();
@@ -460,21 +464,13 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
 	float TargetMinCarbonKg = 4000.0f;
 
-	/** Carbon ceiling at which unsealed smokestacks completely choke out Sun Pockets (Default: 2.5x C_min). */
+	/** Carbon ceiling at which unsealed smokestacks completely choke out Sun Pockets (1.0x C_min: a run that seals nothing chokes the sky in ~30 s). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
-	float SkyChokeCarbonMultiplier = 2.5f;
+	float SkyChokeCarbonMultiplier = 1.0f;
 
-	/** Sun intensity multiplier when the sky is fully choked (1.0 = clear sky). */
+	/** Sun intensity multiplier when the sky is fully choked (1.0 = clear sky). Kept mild: the play space must stay readable. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Sky", meta = (AllowPrivateAccess = "true"))
-	float ChokedSunIntensityScale = 0.3f;
-
-	/** Density of the high-altitude smoke haze (height fog second layer) when the sky is fully choked. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Sky", meta = (AllowPrivateAccess = "true"))
-	float ChokedHighSmogDensity = 0.08f;
-
-	/** World Z offset (from the fog actor) where the high smoke haze is densest. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Sky", meta = (AllowPrivateAccess = "true"))
-	float HighSmogHeightOffset = 7000.0f;
+	float ChokedSunIntensityScale = 0.6f;
 
 	/** 3 stars when cumulative carbon stays within this multiple of C_min (Default: 1.25x). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|Config", meta = (AllowPrivateAccess = "true"))
@@ -512,15 +508,36 @@ private:
 	float FirstJetDelaySeconds = 6.0f;
 
 	TArray<TWeakObjectPtr<APrivateJet>> TrackedJets;
+
+	/** Level-wide "photon rain": one NS_SunMotes cell per grid square, shown only while that square's sky is open. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|SunRain", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UNiagaraSystem> SunRainSystem;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|SunRain", meta = (AllowPrivateAccess = "true"))
+	float SunRainCellSize = 5000.0f;
+
+	/** Extra coverage around the smokestacks' bounding box. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|SunRain", meta = (AllowPrivateAccess = "true"))
+	float SunRainMargin = 12000.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "DoNotSmoke|SunRain", meta = (AllowPrivateAccess = "true"))
+	float SunRainCheckInterval = 0.5f;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UNiagaraComponent>> SunRainCells;
+
+	FTimerHandle SunRainTimerHandle;
+
+	void BuildSunRainGrid();
+	void UpdateSunRainCells();
 	float JetDispatchTimer = 0.0f;
 
 	void TickJetDispatcher(float DeltaTime);
 
 	TWeakObjectPtr<class ADirectionalLight> SunLight;
-	TWeakObjectPtr<class AExponentialHeightFog> SkyFog;
 	float BaseSunIntensity = 0.0f;
 
-	/** Dims the sun and thickens the high smoke haze as carbon accumulates (0 = clear, 1 = choked). */
+	/** Dims the sun as carbon accumulates (0 = clear, 1 = choked); no haze is added to the play space. */
 	void ApplySkyChoke(float ChokeAlpha);
 
 	UFUNCTION()

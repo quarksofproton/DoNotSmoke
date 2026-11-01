@@ -191,10 +191,10 @@ private:
 	float LethalPlumeHalfHeight = 3400.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "200.0"))
-	float CanopyMinRadius = 800.0f;
+	float CanopyMinRadius = 1500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true", ClampMin = "500.0"))
-	float CanopyMaxRadius = 3200.0f;
+	float CanopyMaxRadius = 9000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
 	float CanopyWorldAltitude = 8500.0f;
@@ -239,13 +239,24 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Assets", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraSystem> SkySmogSystem;
 
-	/** Height of the sky smoke cloud relative to the canopy blocker, so it sits on top of the rising plume. */
+	/**
+	 * The canopy blocker is the bottom cap of a huge sphere lifted this far above CanopyWorldAltitude, so it acts as a flat
+	 * disc of the canopy radius (sagging only ~R^2 / 2*Lift below the ceiling) and upward traces never start inside it.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
-	float CanopySmokeOffsetZ = -500.0f;
+	float CanopyDomeLift = 200000.0f;
+
+	/** Height of the sky smoke cloud relative to CanopyWorldAltitude; kept above it so big sprites do not hang into the flight band. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	float CanopySmokeOffsetZ = 1200.0f;
 
 	/** Sky smoke spawn rate at the smallest and largest canopy radius (particles per second). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
-	FVector2D CanopySmokeSpawnRateRange = FVector2D(2.0f, 6.0f);
+	FVector2D CanopySmokeSpawnRateRange = FVector2D(3.0f, 16.0f);
+
+	/** Sky smoke particle size multiplier at the smallest and largest canopy radius, so the cloud stays dense as it spreads. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Smokestack|Config", meta = (AllowPrivateAccess = "true"))
+	FVector2D CanopySmokeSizeScaleRange = FVector2D(1.0f, 2.0f);
 
 	// ==========================================
 	// INTERNAL STATE
@@ -257,5 +268,6 @@ private:
 
 	void RefreshArchetypeCollisionState();
 	void UpdateCanopyCloud(float Radius);
+	void ApplyCanopyRadius(float Radius);
 	UNiagaraSystem* GetActiveSmogSystem() const;
 };

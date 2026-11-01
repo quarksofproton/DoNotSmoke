@@ -96,10 +96,12 @@ ASmokestack::ASmokestack()
 	OverheadSmogCanopySphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	OverheadSmogCanopySphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	OverheadSmogCanopySphere->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	// The lifted dome is ~400 km wide; never draw its wireframe
+	OverheadSmogCanopySphere->SetVisibility(false);
 
 	CanopySmokeVFX = CreateDefaultSubobject<UNiagaraComponent>(TEXT("CanopySmokeVFX"));
-	CanopySmokeVFX->SetupAttachment(OverheadSmogCanopySphere);
-	CanopySmokeVFX->SetRelativeLocation(FVector(0.0f, 0.0f, CanopySmokeOffsetZ));
+	CanopySmokeVFX->SetupAttachment(SceneRoot);
+	CanopySmokeVFX->SetUsingAbsoluteLocation(true);
 	CanopySmokeVFX->bAutoActivate = true;
 	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> SkySmogAsset(TEXT("/Game/Game/VFX/NS_SkySmog.NS_SkySmog"));
 	if (SkySmogAsset.Succeeded())
@@ -223,10 +225,7 @@ void ASmokestack::OnConstruction(const FTransform& Transform)
 
 	if (OverheadSmogCanopySphere)
 	{
-		const FVector ActorLoc = GetActorLocation();
-		OverheadSmogCanopySphere->SetWorldLocation(FVector(ActorLoc.X, ActorLoc.Y, CanopyWorldAltitude));
-		OverheadSmogCanopySphere->SetSphereRadius(CanopyMinRadius);
-		UpdateCanopyCloud(CanopyMinRadius);
+		ApplyCanopyRadius(CanopyMinRadius);
 	}
 
 	RefreshArchetypeCollisionState();
@@ -280,9 +279,19 @@ void ASmokestack::SetCanopyExpansionAlpha(float ExpansionAlpha)
 	}
 
 	const float ClampedAlpha = FMath::Clamp(ExpansionAlpha, 0.0f, 1.0f);
-	const float NewRadius = FMath::Lerp(CanopyMinRadius, CanopyMaxRadius, ClampedAlpha);
-	OverheadSmogCanopySphere->SetSphereRadius(NewRadius);
-	UpdateCanopyCloud(NewRadius);
+	ApplyCanopyRadius(FMath::Lerp(CanopyMinRadius, CanopyMaxRadius, ClampedAlpha));
+}
+
+void ASmokestack::ApplyCanopyRadius(float Radius)
+{
+	if (OverheadSmogCanopySphere)
+	{
+		// Bottom cap of a lifted sphere: its circle at CanopyWorldAltitude has exactly the canopy radius
+		const FVector ActorLoc = GetActorLocation();
+		OverheadSmogCanopySphere->SetWorldLocation(FVector(ActorLoc.X, ActorLoc.Y, CanopyWorldAltitude + CanopyDomeLift));
+		OverheadSmogCanopySphere->SetSphereRadius(FMath::Sqrt(FMath::Square(Radius) + FMath::Square(CanopyDomeLift)));
+	}
+	UpdateCanopyCloud(Radius);
 }
 
 void ASmokestack::UpdateCanopyCloud(float Radius)
@@ -293,9 +302,11 @@ void ASmokestack::UpdateCanopyCloud(float Radius)
 	}
 
 	const float GrowthAlpha = FMath::GetRangePct(CanopyMinRadius, CanopyMaxRadius, Radius);
-	CanopySmokeVFX->SetRelativeLocation(FVector(0.0f, 0.0f, CanopySmokeOffsetZ));
+	CanopySmokeVFX->SetWorldLocation(FVector(GetActorLocation().X, GetActorLocation().Y, CanopyWorldAltitude + CanopySmokeOffsetZ));
 	CanopySmokeVFX->SetVariableFloat(TEXT("SpreadRadius"), Radius);
-	CanopySmokeVFX->SetVariableFloat(TEXT("SpawnRate"), FMath::Lerp(CanopySmokeSpawnRateRange.X, CanopySmokeSpawnRateRange.Y, FMath::Clamp(GrowthAlpha, 0.0f, 1.0f)));
+	const float ClampedGrowth = FMath::Clamp(GrowthAlpha, 0.0f, 1.0f);
+	CanopySmokeVFX->SetVariableFloat(TEXT("SpawnRate"), FMath::Lerp(CanopySmokeSpawnRateRange.X, CanopySmokeSpawnRateRange.Y, ClampedGrowth));
+	CanopySmokeVFX->SetVariableFloat(TEXT("SizeScale"), FMath::Lerp(CanopySmokeSizeScaleRange.X, CanopySmokeSizeScaleRange.Y, ClampedGrowth));
 }
 
 UNiagaraSystem* ASmokestack::GetActiveSmogSystem() const

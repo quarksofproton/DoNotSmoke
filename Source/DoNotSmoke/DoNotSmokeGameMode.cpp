@@ -6,10 +6,12 @@
 #include "Smokestack.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "TimerManager.h"
 #include "Engine/DirectionalLight.h"
-#include "Engine/ExponentialHeightFog.h"
 #include "Components/LightComponent.h"
-#include "Components/ExponentialHeightFogComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
@@ -1001,6 +1003,12 @@ ADoNotSmokeGameMode::ADoNotSmokeGameMode()
 	FlightHUDWidgetClass = UDoNotSmokeFlightHUDWidget::StaticClass();
 	SummaryWidgetClass = UDoNotSmokeSummaryWidget::StaticClass();
 	CrashWidgetClass = UDoNotSmokeCrashWidget::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> SunRainAsset(TEXT("/Game/Game/VFX/NS_SunMotes.NS_SunMotes"));
+	if (SunRainAsset.Succeeded())
+	{
+		SunRainSystem = SunRainAsset.Object;
+	}
 }
 
 void ADoNotSmokeGameMode::BeginPlay()
@@ -1040,17 +1048,12 @@ void ADoNotSmokeGameMode::BeginPlay()
 	}
 
 	// Register all Private Jets in the active level
-	// Sky actors driven by carbon: first directional light is the sun, first height fog carries the high smoke haze
+	// The first directional light is the sun, dimmed as carbon accumulates
 	TActorIterator<ADirectionalLight> SunIt(World);
 	if (SunIt)
 	{
 		SunLight = *SunIt;
 		BaseSunIntensity = SunIt->GetLightComponent() ? SunIt->GetLightComponent()->Intensity : 0.0f;
-	}
-	TActorIterator<AExponentialHeightFog> FogIt(World);
-	if (FogIt)
-	{
-		SkyFog = *FogIt;
 	}
 	ApplySkyChoke(0.0f);
 
@@ -1063,6 +1066,8 @@ void ADoNotSmokeGameMode::BeginPlay()
 		TrackedJets.Add(*It);
 	}
 	JetDispatchTimer = FirstJetDelaySeconds;
+
+	BuildSunRainGrid();
 
 	// Bind to player GliderPawn events for shot accounting and Crash restart
 	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(World, 0))
@@ -1162,6 +1167,84 @@ void ADoNotSmokeGameMode::NotifyCarbonSealFired()
 	++TotalShotsFired;
 }
 
+void ADoNotSmokeGameMode::BuildSunRainGrid()
+{
+	UWorld* World = GetWorld();
+	if (!World || !SunRainSystem || SunRainCellSize <= 0.0f)
+	{
+		return;
+	}
+
+	// Cover the smokestacks' footprint plus a margin
+	FBox2D Bounds(ForceInit);
+	for (const TWeakObjectPtr<ASmokestack>& WeakStack : TrackedSmokestacks)
+	{
+		if (const ASmokestack* Stack = WeakStack.Get())
+		{
+			Bounds += FVector2D(Stack->GetActorLocation());
+		}
+	}
+	if (!Bounds.bIsValid)
+	{
+		return;
+	}
+	Bounds = Bounds.ExpandBy(SunRainMargin);
+
+	const int32 CellsX = FMath::CeilToInt(Bounds.GetSize().X / SunRainCellSize);
+	const int32 CellsY = FMath::CeilToInt(Bounds.GetSize().Y / SunRainCellSize);
+	for (int32 IX = 0; IX < CellsX; ++IX)
+	{
+		for (int32 IY = 0; IY < CellsY; ++IY)
+		{
+			// Spawned at the smoke ceiling; motes fall to the ground under the system's gravity
+			const FVector CellCentre(Bounds.Min.X + (IX + 0.5f) * SunRainCellSize, Bounds.Min.Y + (IY + 0.5f) * SunRainCellSize, 8000.0f);
+			UNiagaraComponent* Cell = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, SunRainSystem, CellCentre, FRotator::ZeroRotator,
+				FVector::OneVector, false, true, ENCPoolMethod::None);
+			if (Cell)
+			{
+				// NS_SunMotes reuses NS_SkySmog's user parameters: cylinder radius, spawn rate, sprite size multiplier
+				Cell->SetVariableFloat(TEXT("SpreadRadius"), SunRainCellSize * 0.6f);
+				Cell->SetVariableFloat(TEXT("SpawnRate"), 2.0f);
+				Cell->SetVariableFloat(TEXT("SizeScale"), 0.3f);
+				SunRainCells.Add(Cell);
+			}
+		}
+	}
+
+	UpdateSunRainCells();
+	World->GetTimerManager().SetTimer(SunRainTimerHandle, this, &ADoNotSmokeGameMode::UpdateSunRainCells, SunRainCheckInterval, true);
+}
+
+void ADoNotSmokeGameMode::UpdateSunRainCells()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Same test as the glider's sunlight trace: a cell rains light only while no smoke canopy is above it
+	for (UNiagaraComponent* Cell : SunRainCells)
+	{
+		if (!Cell)
+		{
+			continue;
+		}
+
+		const FVector Centre = Cell->GetComponentLocation();
+		FHitResult Hit;
+		const bool bCovered = World->LineTraceSingleByChannel(Hit, FVector(Centre.X, Centre.Y, 3000.0f), FVector(Centre.X, Centre.Y, 8500.0f), ECC_Visibility);
+		if (bCovered && Cell->IsActive())
+		{
+			Cell->Deactivate();
+		}
+		else if (!bCovered && !Cell->IsActive())
+		{
+			Cell->Activate(true);
+		}
+	}
+}
+
 void ADoNotSmokeGameMode::TickJetDispatcher(float DeltaTime)
 {
 	if (TrackedJets.Num() == 0)
@@ -1210,17 +1293,39 @@ void ADoNotSmokeGameMode::ApplySkyChoke(float ChokeAlpha)
 			SunComponent->SetIntensity(BaseSunIntensity * FMath::Lerp(1.0f, ChokedSunIntensityScale, Alpha));
 		}
 	}
+}
 
-	if (AExponentialHeightFog* Fog = SkyFog.Get())
+void ADoNotSmokeGameMode::DebugSealNearestStack()
+{
+#if !UE_BUILD_SHIPPING
+	APawn* Glider = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+	if (!Glider)
 	{
-		if (UExponentialHeightFogComponent* FogComponent = Fog->GetComponent())
+		return;
+	}
+
+	ASmokestack* Nearest = nullptr;
+	float BestDistSq = TNumericLimits<float>::Max();
+	for (const TWeakObjectPtr<ASmokestack>& WeakStack : TrackedSmokestacks)
+	{
+		ASmokestack* Stack = WeakStack.Get();
+		if (Stack && !Stack->IsSealed())
 		{
-			// Second fog layer = smoke haze high in the sky, independent of the smog bed's first layer
-			FogComponent->SecondFogData.FogDensity = ChokedHighSmogDensity * Alpha;
-			FogComponent->SecondFogData.FogHeightOffset = HighSmogHeightOffset;
-			FogComponent->MarkRenderStateDirty();
+			const float DistSq = FVector::DistSquared(Stack->GetActorLocation(), Glider->GetActorLocation());
+			if (DistSq < BestDistSq)
+			{
+				BestDistSq = DistSq;
+				Nearest = Stack;
+			}
 		}
 	}
+
+	// One TrySealTarget call seals one mouth; repeat for clustered stacks
+	for (int32 Attempt = 0; Nearest && !Nearest->IsSealed() && Attempt < 3; ++Attempt)
+	{
+		IBPI_SealableTarget::Execute_TrySealTarget(Nearest, Glider);
+	}
+#endif
 }
 
 void ADoNotSmokeGameMode::DebugForceLevelComplete(int32 Stars)
